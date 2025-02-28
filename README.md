@@ -38,6 +38,6 @@ pip install numpy
 After installing the Pillow library, you can run the script using the following command:
 
 ```bash
-python dither_guy.py input_image output_image
+python dither_guy.py
 ```
 
