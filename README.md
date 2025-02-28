@@ -9,11 +9,17 @@ Is a simple Python script that converts images to dithered images.  It uses the 
 <img src="output/skull.png" alt="Texto alternativo" width="300" height="200">
 
 ## How to use
-To use the script, you need to have Python installed on your computer. You also need to install the Pillow library. You can install the Pillow library using the following command:
+To use the script, you need to have Python installed on your computer. You also need to install the Pillowa and numpy libraries. You can install the Pillow and numpy libraries using the following command:
 
 ```bash
 pip install Pillow
 ```
+
+```bash
+pip install numpy
+```
+
+
 
 After installing the Pillow library, you can run the script using the following command:
 
