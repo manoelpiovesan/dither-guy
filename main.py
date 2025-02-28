@@ -72,7 +72,7 @@ def invert_colors():
 
 root = tk.Tk()
 root.title("Dither Guy")
-root.geometry("500x700")
+root.geometry("900x700")
 
 original_img = None
 
