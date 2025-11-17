@@ -6,12 +6,6 @@ Is a simple Python script that converts images to dithered images. It supports m
 
 <img width="600" height="959" alt="image" src="https://github.com/user-attachments/assets/baf820e0-a0aa-4da2-8549-1f76f4531268" />
 
-**Changelogs**
-- added more filters
-- fixed image preview window
-- moved to Qtpyside6 for ui
-- added brightness, contrast etc options.
-
 ## Input x Output
 
 <div style="display: inline-block; margin-right: 10px;">
