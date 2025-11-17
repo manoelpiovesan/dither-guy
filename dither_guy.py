@@ -477,7 +477,7 @@ class DitherApp(QMainWindow):
         
         self.init_ui()
         self.apply_dark_theme()
-        icon_path = Path("app_png.icon")
+        icon_path = Path("app_icon.png")
         icon_pixmap = QPixmap(icon_path)
         icon = QIcon(icon_pixmap)
         self.setWindowIcon(icon)
