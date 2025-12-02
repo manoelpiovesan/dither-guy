@@ -1,4 +1,4 @@
-![](https://badgen.net/github/views/manoelpiovesan/dither-guy)
+![](https://komarev.com/ghpvc/?username=manoelpiovesan&repo=dither-guy&color=blue)
 
 # Dither Guy (Updated)
 
