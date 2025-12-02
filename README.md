@@ -1,3 +1,5 @@
+![](https://badgen.net/github/views/manoelpiovesan/dither-guy)
+
 # Dither Guy (Updated)
 
 Dither Guy is inspired by the [Dither Boy](https://studioaaa.com/product/dither-boy/) software, used to create graphic dithering effects, similar to old screens.
