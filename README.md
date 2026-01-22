@@ -1,6 +1,8 @@
 ![](https://komarev.com/ghpvc/?username=manoelpiovesan&repo=dither-guy&color=blue)
 
-# Dither Guy (Updated)
+# Dither Guy 
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L61SRB88)
 
 Dither Guy is inspired by the [Dither Boy](https://studioaaa.com/product/dither-boy/) software, used to create graphic dithering effects, similar to old screens.
 
