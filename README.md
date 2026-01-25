@@ -1,4 +1,4 @@
-# Dither Guy 
+# Dither Guy
 
 [![Build Status](https://github.com/manoelpiovesan/dither-guy/actions/workflows/main.yml/badge.svg)](https://github.com/manoelpiovesan/dither-guy/actions/workflows/main.yml)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/manoelpiovesan/dither-guy)](https://github.com/manoelpiovesan/dither-guy/releases/latest)
@@ -6,17 +6,27 @@
 [![GitHub downloads (latest release)](https://img.shields.io/github/downloads/manoelpiovesan/dither-guy/latest/total)](https://github.com/manoelpiovesan/dither-guy/releases/latest)
 ![](https://komarev.com/ghpvc/?username=manoelpiovesan&repo=dither-guy&color=blue)
 
-Dither Guy is inspired by the [Dither Boy](https://studioaaa.com/product/dither-boy/) software, used to create graphic dithering effects, similar to old screens.
+**Dither Guy** is a software inspired by [Dither Boy](https://studioaaa.com/product/dither-boy/), designed to create graphic dithering effects similar to those found on old displays and low color-depth systems.
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L61SRB88)
+The project focuses on providing a simple and straightforward tool for applying dithering to images and videos, preserving a controlled and retro visual aesthetic.
+
+[Support the project on Ko-fi](https://ko-fi.com/L3L61SRB88)
+
+---
 
 ## Download
 
-Download the latest release for your platform, visit the [releases page](https://github.com/manoelpiovesan/dither-guy/releases/latest) to see all available versions.
+The latest binaries for each platform are available on the releases page:
 
-<img width="600" height="959" alt="image" src="https://github.com/user-attachments/assets/baf820e0-a0aa-4da2-8549-1f76f4531268" />
+👉 https://github.com/manoelpiovesan/dither-guy/releases/latest
 
-## Input x Output
+<img width="600" height="959" alt="Dither Guy interface" src="https://github.com/user-attachments/assets/baf820e0-a0aa-4da2-8549-1f76f4531268" />
+
+---
+
+## Input × Output
+
+Examples of input and output using different dithering configurations:
 
 <div style="display: inline-block; margin-right: 10px;">
   <img src="input/example.png" height="200">
@@ -28,13 +38,18 @@ Download the latest release for your platform, visit the [releases page](https:/
   <img src="output/green_example_output.png" height="200">
 </div>
 
-## Running as development mode
+---
+
+## Running in Development Mode
+
+To run the project locally in development mode:
 
 ```bash
 python3 -m venv venv
-source venve/bin/activate
+source venv/bin/activate
 pip install -r requirements.txt
 python3 dither_guy.py
+
 ```
 
 ## BETA Video Dithering
