@@ -15,13 +15,7 @@ Is a simple Python script that converts images to dithered images. It supports m
 
 ## 📥 Download
 
-Download the latest release for your platform:
-
-- **Windows**: [DitherGuy.exe](https://github.com/manoelpiovesan/dither-guy/releases/latest/download/DitherGuy.exe) | [DitherGuyVideo.exe](https://github.com/manoelpiovesan/dither-guy/releases/latest/download/DitherGuyVideo.exe)
-- **Linux**: [DitherGuy](https://github.com/manoelpiovesan/dither-guy/releases/latest/download/DitherGuy) | [DitherGuyVideo](https://github.com/manoelpiovesan/dither-guy/releases/latest/download/DitherGuyVideo)
-- **macOS**: [DitherGuy](https://github.com/manoelpiovesan/dither-guy/releases/latest/download/DitherGuy) | [DitherGuyVideo](https://github.com/manoelpiovesan/dither-guy/releases/latest/download/DitherGuyVideo)
-
-Or visit the [releases page](https://github.com/manoelpiovesan/dither-guy/releases/latest) to see all available versions.
+Download the latest release for your platform, visit the [releases page](https://github.com/manoelpiovesan/dither-guy/releases/latest) to see all available versions.
 
 <img width="600" height="959" alt="image" src="https://github.com/user-attachments/assets/baf820e0-a0aa-4da2-8549-1f76f4531268" />
 
