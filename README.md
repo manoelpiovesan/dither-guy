@@ -10,7 +10,7 @@ Dither Guy is inspired by the [Dither Boy](https://studioaaa.com/product/dither-
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L61SRB88)
 
-## 📥 Download
+## Download
 
 Download the latest release for your platform, visit the [releases page](https://github.com/manoelpiovesan/dither-guy/releases/latest) to see all available versions.
 
@@ -28,42 +28,14 @@ Download the latest release for your platform, visit the [releases page](https:/
   <img src="output/green_example_output.png" height="200">
 </div>
 
-## How to use
-
-### Option 1: Use the pre-built executables (Recommended)
-
-Download the executables from the [📥 Download section](#-download) above. No Python installation required!
-
-### Option 2: Run from source
-
-To use the script, you need to have Python installed on your computer. You also need to install the dependencies using the following command: 
+## Running as development mode
 
 ```bash
+python3 -m venv venv
+source venve/bin/activate
 pip install -r requirements.txt
+python3 dither_guy.py
 ```
-
-After installing the dependencies, you can run the script using the following command:
-
-```bash
-python dither_guy.py
-```
-
-### Option 3: Build your own executable
-
-To generate an executable file, you can use the following command:
-
-```bash
-pyinstaller --onefile dither_guy.py
-```
-
-Note: You need to have the PyInstaller library installed on your computer to generate the executable file. You can install
-the PyInstaller library using the following command:
-
-```bash
-pip install pyinstaller
-```
-
-> **Note**: Executables are automatically built for Windows, Linux, and macOS via GitHub Actions when a new release tag is created.
 
 ## BETA Video Dithering
 ![Gif](input/computer_input.gif)
