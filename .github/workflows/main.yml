@@ -3,7 +3,7 @@ name: Build Dither Guy Executables
 on:
   pull_request:
     branches:
-      - 'main'
+      - 'master'
   push:
     tags:
       - 'v*'
