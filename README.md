@@ -1,11 +1,11 @@
-![](https://komarev.com/ghpvc/?username=manoelpiovesan&repo=dither-guy&color=blue)
-
 # Dither Guy 
 
 [![Build Status](https://github.com/manoelpiovesan/dither-guy/actions/workflows/main.yml/badge.svg)](https://github.com/manoelpiovesan/dither-guy/actions/workflows/main.yml)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/manoelpiovesan/dither-guy)](https://github.com/manoelpiovesan/dither-guy/releases/latest)
 [![GitHub downloads](https://img.shields.io/github/downloads/manoelpiovesan/dither-guy/total)](https://github.com/manoelpiovesan/dither-guy/releases)
 [![GitHub downloads (latest release)](https://img.shields.io/github/downloads/manoelpiovesan/dither-guy/latest/total)](https://github.com/manoelpiovesan/dither-guy/releases/latest)
+![](https://komarev.com/ghpvc/?username=manoelpiovesan&repo=dither-guy&color=blue)
+
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L61SRB88)
 
