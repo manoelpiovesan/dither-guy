@@ -10,7 +10,7 @@
 
 The project focuses on providing a simple and straightforward tool for applying dithering to images and videos, preserving a controlled and retro visual aesthetic.
 
-[Support the project on Ko-fi](https://ko-fi.com/L3L61SRB88)
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L61SRB88)
 
 ---
 
