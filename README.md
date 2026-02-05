@@ -18,7 +18,9 @@ The latest binaries for each platform are available on the releases page:
 
 👉 https://github.com/manoelpiovesan/dither-guy/releases/latest
 
-<img width="600" height="959" alt="Dither Guy interface" src="https://github.com/user-attachments/assets/baf820e0-a0aa-4da2-8549-1f76f4531268" />
+| Interface |
+|-----------|
+|![Screenshot](https://github.com/user-attachments/assets/baf820e0-a0aa-4da2-8549-1f76f4531268)|
 
 <h2 align="center">Image</h2>
 
