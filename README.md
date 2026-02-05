@@ -23,14 +23,14 @@ The latest binaries for each platform are available on the releases page:
 
 ---
 
-## Image
+<h2 align="center">Image</h2>
 
 | Original | Dithered | Colored |
 |----------|----------|---------|
 |![Original](input/example.png)|![Dithered](output/example_output.png)| ![Colored](output/green_example_output.png)|
 
 
-## Video 
+<h2 align="center">Video</h2> 
 
 | Original | Dithered |
 |----------|----------|
