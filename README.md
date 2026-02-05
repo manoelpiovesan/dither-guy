@@ -29,14 +29,7 @@ Examples of input and output using different dithering configurations:
 
 | Original | Dithered | Colored |
 |----------|----------|---------|
-|<div style="display: inline-block; margin-right: 10px;">
-  <img src="input/example.png" height="200">
-</div>|<div style="display: inline-block;">
-  <img src="output/example_output.png" height="200">
-</div>|
-<div style="display: inline-block;">
-  <img src="output/green_example_output.png" height="200">
-</div>|
+|![Original](input/example.png)|![Dithered](output/example_output.png)| ![Colored](output/green_example_output.png)|
 
 ---
 
