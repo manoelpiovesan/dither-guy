@@ -11,7 +11,6 @@ The project focuses on providing a simple and straightforward tool for applying 
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L61SRB88)
 
----
 
 ## Download
 
@@ -34,8 +33,6 @@ The latest binaries for each platform are available on the releases page:
 |----------|----------|
 |![Gif](input/computer_input.gif)|![Gif](output/computer.gif)|
 
-
----
 
 ## Running in Development Mode
 
