@@ -27,15 +27,16 @@ The latest binaries for each platform are available on the releases page:
 
 Examples of input and output using different dithering configurations:
 
-<div style="display: inline-block; margin-right: 10px;">
+| Original | Dithered | Colored |
+|----------|----------|---------|
+|<div style="display: inline-block; margin-right: 10px;">
   <img src="input/example.png" height="200">
-</div>
-<div style="display: inline-block;">
+</div>|<div style="display: inline-block;">
   <img src="output/example_output.png" height="200">
-</div>
+</div>|
 <div style="display: inline-block;">
   <img src="output/green_example_output.png" height="200">
-</div>
+</div>|
 
 ---
 
