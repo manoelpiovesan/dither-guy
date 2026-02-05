@@ -23,13 +23,19 @@ The latest binaries for each platform are available on the releases page:
 
 ---
 
-## Input × Output
-
-Examples of input and output using different dithering configurations:
+## Image
 
 | Original | Dithered | Colored |
 |----------|----------|---------|
 |![Original](input/example.png)|![Dithered](output/example_output.png)| ![Colored](output/green_example_output.png)|
+
+
+## Video 
+
+| Original | Dithered |
+|----------|----------|
+|![Gif](input/computer_input.gif)|![Gif](output/computer.gif)|
+
 
 ---
 
@@ -44,9 +50,5 @@ pip install -r requirements.txt
 python3 dither_guy.py
 
 ```
-
-## BETA Video Dithering
-![Gif](input/computer_input.gif)
-![Gif](output/computer.gif)
 
 
