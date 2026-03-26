@@ -21,7 +21,7 @@ The latest binaries for each platform are available on the releases page:
 
 ![Screenshot](https://github.com/user-attachments/assets/baf820e0-a0aa-4da2-8549-1f76f4531268)
 
-<h2 align="center">Image</h2>
+<!-- <h2 align="center">Image</h2>
 
 | Original | Dithered | Colored |
 |----------|----------|---------|
@@ -32,7 +32,7 @@ The latest binaries for each platform are available on the releases page:
 
 | Original | Dithered |
 |----------|----------|
-|![Gif](input/computer_input.gif)|![Gif](output/computer.gif)|
+|![Gif](input/computer_input.gif)|![Gif](output/computer.gif)| -->
 
 
 ## Running in Development Mode
