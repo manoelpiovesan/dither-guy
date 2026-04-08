@@ -57,10 +57,10 @@ Special thanks to project contributors and supporters via Ko-Fi
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=dither-guy%2Fdither-guy%2Cmanoelpiovesan%2Fdither-guy&type=date&legend=top-left">
+<a href="https://www.star-history.com/?repos=manoelpiovesan%2Fdither-guy&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=dither-guy/dither-guy%2Cmanoelpiovesan/dither-guy&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=dither-guy/dither-guy%2Cmanoelpiovesan/dither-guy&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=dither-guy/dither-guy%2Cmanoelpiovesan/dither-guy&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=manoelpiovesan/dither-guy&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=manoelpiovesan/dither-guy&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=manoelpiovesan/dither-guy&type=date&legend=top-left" />
  </picture>
 </a>
