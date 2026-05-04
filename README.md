@@ -21,7 +21,7 @@ The latest binaries for each platform are available on the releases page:
 
 ![Screenshot](https://github.com/user-attachments/assets/baf820e0-a0aa-4da2-8549-1f76f4531268)
 
-<h2 align="center">Image</h2>
+<!-- <h2 align="center">Image</h2>
 
 | Original | Dithered | Colored |
 |----------|----------|---------|
@@ -32,7 +32,7 @@ The latest binaries for each platform are available on the releases page:
 
 | Original | Dithered |
 |----------|----------|
-|![Gif](input/computer_input.gif)|![Gif](output/computer.gif)|
+|![Gif](input/computer_input.gif)|![Gif](output/computer.gif)| -->
 
 
 ## Running in Development Mode
@@ -55,4 +55,12 @@ Special thanks to project contributors and supporters via Ko-Fi
 - [@momed081 (Contributor)](https://github.com/momed081)
 
 
+## Star History
 
+<a href="https://www.star-history.com/?repos=manoelpiovesan%2Fdither-guy&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=manoelpiovesan/dither-guy&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=manoelpiovesan/dither-guy&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=manoelpiovesan/dither-guy&type=date&legend=top-left" />
+ </picture>
+</a>
