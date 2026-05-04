@@ -70,7 +70,7 @@ jobs:
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DitherGuy-Windows-${{ github.ref_name }}
+          name: DitherGuy-Windows-beta
           path: dist/DitherGuy.exe
           retention-days: 14
 
@@ -146,7 +146,7 @@ jobs:
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DitherGuy-Linux-${{ github.ref_name }}
+          name: DitherGuy-Linux-beta
           path: dist/DitherGuy
           retention-days: 14
 
@@ -201,6 +201,6 @@ jobs:
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DitherGuy-macOS-${{ github.ref_name }}
+          name: DitherGuy-macOS-beta
           path: dist/DitherGuy
           retention-days: 14
