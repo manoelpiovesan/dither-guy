@@ -163,7 +163,7 @@ class ControlPanel(QWidget):
         # Presets
         pg = QGroupBox("Presets"); pl = QVBoxLayout(pg); pl.setSpacing(6)
         row_p = QHBoxLayout()
-        self.preset_name = QLineEdit(); self.preset_name.setPlaceholderText("preset name…")
+        self.preset_name = QLineEdit(); self.preset_name.setPlaceholderText("preset name...")
         self.preset_name.setMinimumHeight(26); row_p.addWidget(self.preset_name)
         save_p = QPushButton("Save"); save_p.setMinimumHeight(26)
         save_p.clicked.connect(self._save_preset); row_p.addWidget(save_p)
@@ -180,7 +180,7 @@ class ControlPanel(QWidget):
 
         layout.addStretch()
         if _NUMBA:
-            jit_lbl = QLabel("◆ numba JIT active"); jit_lbl.setAlignment(Qt.AlignCenter)
+            jit_lbl = QLabel("numba JIT active"); jit_lbl.setAlignment(Qt.AlignCenter)
             jit_lbl.setStyleSheet(
                 f"font-family:{_MONO_FONT}; font-size:9px; color:{_FG}; padding:0 0 6px 0;")
             layout.addWidget(jit_lbl)
@@ -191,11 +191,18 @@ class ControlPanel(QWidget):
         layout.addWidget(ver)
 
         # Wire sliders
+        # On Windows, emitting params_changed_preview on every valueChanged
+        # tick while the mouse button is held floods the worker queue and
+        # causes stale finished signals to snap the canvas back to an earlier
+        # state once the drag ends (issue #8).  We therefore only emit the
+        # preview signal when the user is NOT actively dragging — the label
+        # still updates every tick for responsive number feedback, and a full
+        # render is triggered on sliderReleased via params_changed.
         def _connect(sl, lbl, fmt):
             sl.sliderPressed.connect(lambda: setattr(self, '_dragging_slider', True))
             sl.sliderReleased.connect(self._on_slider_released)
             sl.valueChanged.connect(lambda v, l=lbl, f=fmt: l.setText(f.format(v=v)))
-            sl.valueChanged.connect(lambda _: self.params_changed_preview.emit())
+            sl.valueChanged.connect(self._on_slider_value_changed)
 
         _connect(self.pixel_sl,   self._pix_val, "{v}")
         _connect(self.thresh_sl,  self._thr_val, "{v}")
@@ -205,6 +212,14 @@ class ControlPanel(QWidget):
         _connect(self.sharp_sl,   self._sh_val,  "{v}")
         _connect(self.glow_r_sl,  self._gr_val,  "{v}")
         _connect(self.glow_i_sl,  self._gi_val,  "{v}%")
+
+    def _on_slider_value_changed(self):
+        # Only fire a live preview when the value changes via keyboard or
+        # programmatic setValue — not while the mouse button is held down.
+        # While dragging, the label already updated above; the full render
+        # will fire on sliderReleased -> params_changed.
+        if not self._dragging_slider:
+            self.params_changed_preview.emit()
 
     def _on_slider_released(self):
         self._dragging_slider = False
