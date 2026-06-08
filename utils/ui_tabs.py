@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tempfile
 from typing import Optional
 import itertools
 
 import numpy as np
 from PIL import Image
-from PySide6.QtCore import Qt, Signal, QTimer, QUrl
+from PySide6.QtCore import Qt, Signal, QTimer, QUrl, QThread
 from PySide6.QtGui import QImage, QPixmap, QGuiApplication
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QScrollArea, QCheckBox, QFileDialog, QMessageBox,
-    QProgressBar, QSlider, QStyle, QSplitter,
+    QProgressBar, QSlider, QStyle, QSplitter, QProgressDialog,
 )
 
 from .constants import _MAX_PIXELS, _HISTORY_LIMIT, _DEBOUNCE_MS
@@ -53,6 +54,7 @@ class ImageTab(QWidget):
         self.last_dir       = str(Path.home())
         self.worker:        Optional[DitherWorker] = None
         self._worker_id     = 0
+        self._orphaned_workers = []
         self.auto_update    = True
         self._history:      list[Image.Image] = []
         self._timer         = QTimer(singleShot=True)
@@ -61,7 +63,6 @@ class ImageTab(QWidget):
         self._preview_timer.timeout.connect(self._process_preview)
         self._split_visible = True
         self._build()
-        self.setAcceptDrops(True)
 
     # ── Build ──────────────────────────────────────────────────────────────
 
@@ -78,59 +79,14 @@ class ImageTab(QWidget):
         )
         layout.addWidget(self.info_lbl)
 
-        # ── Split view: left=source, right=dithered ────────────────────────
-        self._splitter = QSplitter(Qt.Horizontal)
-        self._splitter.setHandleWidth(2)
-        self._splitter.setStyleSheet(
-            f"QSplitter::handle {{ background:{_P5}; }}"
-        )
-
-        src_scroll = QScrollArea()
-        src_scroll.setWidgetResizable(True)
-        self._src_label = QLabel("SOURCE")
-        self._src_label.setAlignment(Qt.AlignCenter)
-        self._src_label.setStyleSheet(
-            f"font-family:{_MONO_FONT}; font-size:9px; color:{_FG3};"
-            f"background:{_P0}; padding:2px 6px;"
-        )
-        self.src_canvas = ZoomableLabel("")
-        self.src_canvas.setStyleSheet(
-            f"font-family:{_MONO_FONT}; font-size:14px; color:{_P5}; background:{_P0};"
-        )
-        src_wrap = QWidget()
-        src_wrap.setStyleSheet(f"background:{_P0};")
-        src_layout = QVBoxLayout(src_wrap)
-        src_layout.setContentsMargins(0, 0, 0, 0)
-        src_layout.setSpacing(0)
-        src_layout.addWidget(self._src_label)
-        src_scroll.setWidget(self.src_canvas)
-        src_layout.addWidget(src_scroll, stretch=1)
-        self._splitter.addWidget(src_wrap)
-
-        dst_scroll = QScrollArea()
-        dst_scroll.setWidgetResizable(True)
-        self._dst_label = QLabel("DITHERED")
-        self._dst_label.setAlignment(Qt.AlignCenter)
-        self._dst_label.setStyleSheet(
-            f"font-family:{_MONO_FONT}; font-size:9px; color:{_FG3};"
-            f"background:{_P0}; padding:2px 6px;"
-        )
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
         self.canvas = ZoomableLabel("▣ Drop image here · Ctrl+O")
         self.canvas.setStyleSheet(
             f"font-family:{_MONO_FONT}; font-size:14px; color:{_P5}; background:{_P0};"
         )
-        dst_wrap = QWidget()
-        dst_wrap.setStyleSheet(f"background:{_P0};")
-        dst_layout = QVBoxLayout(dst_wrap)
-        dst_layout.setContentsMargins(0, 0, 0, 0)
-        dst_layout.setSpacing(0)
-        dst_layout.addWidget(self._dst_label)
-        dst_scroll.setWidget(self.canvas)
-        dst_layout.addWidget(dst_scroll, stretch=1)
-        self._splitter.addWidget(dst_wrap)
-
-        self._splitter.setSizes([1, 1])
-        layout.addWidget(self._splitter, stretch=1)
+        scroll.setWidget(self.canvas)
+        layout.addWidget(scroll, stretch=1)
 
         self.histogram = HistogramWidget()
         self.histogram.setVisible(False)
@@ -153,25 +109,16 @@ class ImageTab(QWidget):
             bl1.addWidget(b)
             return b
 
-        _btn("◑ Invert",  self.invert)
-        _btn("↺ L",       self.rotate_left,  tip="Rotate 90° CCW")
-        _btn("↻ R",       self.rotate_right, tip="Rotate 90° CW")
-        _btn("↔ H",       self.flip_h,       tip="Flip horizontal")
-        _btn("↕ V",       self.flip_v,       tip="Flip vertical")
-        _btn("✂ Crop",    self.crop)
+        _btn("◑  Invert",  self.invert)
+        _btn("↺  Left",       self.rotate_left,  tip="Rotate 90° CCW")
+        _btn("↻  Right",       self.rotate_right, tip="Rotate 90° CW")
+        _btn("↔  Flip H",       self.flip_h,       tip="Flip horizontal")
+        _btn("↕  Flip V",       self.flip_v,       tip="Flip vertical")
+        _btn("✂  Crop",    self.crop)
 
         bl1.addWidget(vsep())
 
-        # Split-view toggle
-        self._split_btn = QPushButton("⊟ Split")
-        self._split_btn.setCheckable(True)
-        self._split_btn.setChecked(True)
-        self._split_btn.setMinimumHeight(28)
-        self._split_btn.setToolTip("Toggle source / dithered split view")
-        self._split_btn.toggled.connect(self._toggle_split)
-        bl1.addWidget(self._split_btn)
 
-        bl1.addWidget(vsep())
         self.hist_cb = QCheckBox("Histogram")
         self.hist_cb.stateChanged.connect(lambda s: self.histogram.setVisible(bool(s)))
         bl1.addWidget(self.hist_cb)
@@ -183,47 +130,16 @@ class ImageTab(QWidget):
         self.auto_cb.stateChanged.connect(self._toggle_auto)
         bl1.addWidget(self.auto_cb)
 
-        self.apply_btn = QPushButton("▶ Apply")
+        self.apply_btn = QPushButton("▶  Apply")
         self.apply_btn.setObjectName("accent")
         self.apply_btn.clicked.connect(self.process)
         self.apply_btn.setVisible(False)
         self.apply_btn.setMinimumHeight(28)
         bl1.addWidget(self.apply_btn)
         bl1.addStretch()
-
-        self.undo_btn = QPushButton("↩ Undo")
-        self.undo_btn.clicked.connect(self.undo)
-        self.undo_btn.setEnabled(False)
-        self.undo_btn.setMinimumHeight(22)
-        self.undo_btn.setStyleSheet(
-            f"font-size:10px; font-family:{_MONO_FONT}; padding:2px 7px;"
-        )
-        bl1.addWidget(self.undo_btn)
         layout.addWidget(bar1)
 
-    # ── Split toggle ──────────────────────────────────────────────────
 
-    def _toggle_split(self, checked: bool) -> None:
-        self._split_visible = checked
-        src_pane = self._splitter.widget(0)
-        if checked:
-            src_pane.show()
-            self._splitter.setSizes([1, 1])
-        else:
-            src_pane.hide()
-
-    # ── Drag & drop ──────────────────────────────────────────────────
-
-    def dragEnterEvent(self, e) -> None:
-        if e.mimeData().hasUrls():
-            e.acceptProposedAction()
-
-    def dropEvent(self, e) -> None:
-        for url in e.mimeData().urls():
-            p = url.toLocalFile()
-            if Path(p).suffix.lower() in self._DROP_EXTS:
-                self._load(p)
-                break
 
     # ── Auto-update ──────────────────────────────────────────────────
 
@@ -268,7 +184,7 @@ class ImageTab(QWidget):
         wid = next(_worker_id_counter)
         self._worker_id = wid
         self.worker = self._build_worker(preview=True)
-        self.worker.finished.connect(lambda pl, _id=wid: self._on_done(pl, _id))
+        self.worker.result_ready.connect(lambda pl, _id=wid: self._on_done(pl, _id))
         self.worker.error.connect(lambda _: None)
         self.worker.start()
 
@@ -277,24 +193,56 @@ class ImageTab(QWidget):
             return
         self._stop_worker()
         self.status_message.emit("processing...")
+        if hasattr(self, "_progress_dlg"):
+            self._progress_dlg.show()
         wid = next(_worker_id_counter)
         self._worker_id = wid
         self.worker = self._build_worker(preview=False)
-        self.worker.finished.connect(lambda pl, _id=wid: self._on_done(pl, _id))
+        self.worker.result_ready.connect(lambda pl, _id=wid: self._on_done(pl, _id))
         self.worker.error.connect(self._on_error)
         self.worker.start()
 
     def _stop_worker(self) -> None:
-        if self.worker and self.worker.isRunning():
+        if getattr(self, "worker", None) and self.worker.isRunning():
             self._worker_id = 0
             self.worker.stop()
-            if not self.worker.wait(1500):
-                self.worker.terminate()
-                self.worker.wait(400)
-            self.worker.deleteLater()
+            
+            # Safely orphan the old worker so it dies naturally without blocking UI
+            # We connect to QThread's finished signal safely. Since 'finished' is shadowed
+            # by our custom signal, we must ensure it gets deleted.
+            old_worker = self.worker
+            
+            # Workaround for shadowed 'finished' signal:
+            # We must keep a strong reference to the old worker, otherwise Python
+            # garbage collects it while the C++ thread is still running, which
+            # causes PySide6 to trigger a SIGABRT crash.
+            old_worker = self.worker
+            self._orphaned_workers.append(old_worker)
+            
+            def _cleanup(*args, w=old_worker):
+                if w in self._orphaned_workers:
+                    self._orphaned_workers.remove(w)
+                w.deleteLater()
+
+            old_worker.finished.connect(_cleanup)
+            old_worker.error.connect(_cleanup)
+            
             self.worker = None
 
     # ── File I/O ──────────────────────────────────────────────────────
+
+    def cleanup(self) -> None:
+        self._stop_worker()
+        if hasattr(self, '_orphaned_workers'):
+            for w in self._orphaned_workers:
+                if getattr(w, 'isRunning', lambda: False)():
+                    w.stop()
+                    w.wait()
+                w.deleteLater()
+            self._orphaned_workers.clear()
+        self.original_img = None
+        self.dithered_img = None
+        self._history.clear()
 
     def _load(self, path: str) -> None:
         try:
@@ -309,11 +257,9 @@ class ImageTab(QWidget):
                     return
             self.original_img = img.convert("RGB")
             self._history.clear()
-            self.undo_btn.setEnabled(False)
             self.last_dir = str(Path(path).parent)
             # show source in left pane immediately
-            self.src_canvas.set_image(pil_to_pixmap(self.original_img))
-            self.src_canvas.setStyleSheet(f"background:{_P0};")
+            pass
             self._refresh_info()
             self.status_message.emit(f"loaded {Path(path).name}")
             self.process()
@@ -347,9 +293,7 @@ class ImageTab(QWidget):
                 return
         self.original_img = pil_img
         self._history.clear()
-        self.undo_btn.setEnabled(False)
-        self.src_canvas.set_image(pil_to_pixmap(self.original_img))
-        self.src_canvas.setStyleSheet(f"background:{_P0};")
+
         self._refresh_info()
         self.process()
 
@@ -458,7 +402,6 @@ class ImageTab(QWidget):
         self._history.append(self.original_img.copy())
         if len(self._history) > _HISTORY_LIMIT:
             self._history.pop(0)
-        self.undo_btn.setEnabled(True)
 
     def _require_image(self, op: str = "do this") -> bool:
         if self.original_img is None:
@@ -473,8 +416,7 @@ class ImageTab(QWidget):
             return
         self._push_history()
         self.original_img = fn(self.original_img)
-        self.src_canvas.set_image(pil_to_pixmap(self.original_img))
-        self.src_canvas.setStyleSheet(f"background:{_P0};")
+
         self._refresh_info()
         self.process()
 
@@ -506,10 +448,11 @@ class ImageTab(QWidget):
     def crop(self) -> None:
         if not self._require_image("crop"):
             return
+        assert self.original_img is not None
         from .ui_dialogs import CropDialog
         from PySide6.QtWidgets import QDialog
         dlg = CropDialog(self.original_img.width, self.original_img.height, self)
-        if dlg.exec() != QDialog.Accepted:
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         v  = dlg.values()
         l, t, r, b = v["left"], v["top"], v["right"], v["bottom"]
@@ -520,8 +463,6 @@ class ImageTab(QWidget):
             return
         self._push_history()
         self.original_img = self.original_img.crop((l, t, x2, y2))
-        self.src_canvas.set_image(pil_to_pixmap(self.original_img))
-        self.src_canvas.setStyleSheet(f"background:{_P0};")
         self.status_message.emit(
             f"cropped → {self.original_img.width}×{self.original_img.height}"
         )
@@ -532,9 +473,6 @@ class ImageTab(QWidget):
         if not self._history:
             return
         self.original_img = self._history.pop()
-        self.undo_btn.setEnabled(bool(self._history))
-        self.src_canvas.set_image(pil_to_pixmap(self.original_img))
-        self.src_canvas.setStyleSheet(f"background:{_P0};")
         self.status_message.emit("undo")
         self._refresh_info()
         self.process()
@@ -542,8 +480,16 @@ class ImageTab(QWidget):
     # ── Worker callbacks ────────────────────────────────────────────────
 
     def _on_done(self, payload, worker_id: int) -> None:
+        if payload is None:
+            return
         if worker_id != self._worker_id:
             return
+        
+        # Reset the popup and status message
+        if hasattr(self, "_progress_dlg"):
+            self._progress_dlg.reset()
+        self.status_message.emit("ready")
+
         img, elapsed, is_preview = payload
         if not is_preview:
             self.dithered_img = img
@@ -553,6 +499,8 @@ class ImageTab(QWidget):
         self.canvas.setStyleSheet(f"background:{_P0};")
 
     def _on_error(self, msg: str) -> None:
+        if hasattr(self, "_progress_dlg"):
+            self._progress_dlg.reset()
         self.status_message.emit(f"error: {msg}")
         QMessageBox.warning(self, "Processing Error", msg)
 
@@ -583,6 +531,45 @@ def _fmt_time(seconds: float) -> str:
 # Video tab
 # ---------------------------------------------------------------------------
 
+class ProxyGeneratorWorker(QThread):
+    progress = Signal(int, int)
+    finished_proxy = Signal(str)
+    error = Signal(str)
+
+    def __init__(self, input_path: str, target_width: int, target_height: int):
+        super().__init__()
+        self.input_path = input_path
+        self.target_width = target_width
+        self.target_height = target_height
+
+    def run(self):
+        try:
+            import os
+            cap = cv2.VideoCapture(self.input_path)
+            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+            
+            proxy_path = os.path.join(tempfile.gettempdir(), f"proxy_{os.path.basename(self.input_path)}.mp4")
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            writer = cv2.VideoWriter(proxy_path, fourcc, fps, (self.target_width, self.target_height))
+            
+            count = 0
+            while True:
+                ret, frame = cap.read()
+                if not ret: break
+                
+                frame = cv2.resize(frame, (self.target_width, self.target_height), interpolation=cv2.INTER_AREA)
+                writer.write(frame)
+                count += 1
+                if count % 10 == 0 or count == total:
+                    self.progress.emit(count, total)
+                    
+            cap.release()
+            writer.release()
+            self.finished_proxy.emit(proxy_path)
+        except Exception as e:
+            self.error.emit(str(e))
+
 class VideoTab(QWidget):
     status_message = Signal(str)
 
@@ -601,6 +588,10 @@ class VideoTab(QWidget):
         self._fps          = 25.0
         self._total_frames = 0
         self._scrubbing    = False
+        self._orphaned_workers = []
+        self._frame_worker: Optional[FrameDitherWorker] = None
+        self._proxy_worker: Optional[ProxyGeneratorWorker] = None
+        self._proxy_dlg: Optional[QProgressDialog] = None
         self._play_timer   = QTimer()
         self._play_timer.timeout.connect(self._next_frame)
 
@@ -657,6 +648,16 @@ class VideoTab(QWidget):
             f"font-family:{_MONO_FONT}; font-size:14px; color:{_P5}; background:{_P0};"
         )
         scroll.setWidget(self.canvas)
+
+        self.hq_warn_lbl = QLabel()
+        self.hq_warn_lbl.setAlignment(Qt.AlignCenter)
+        self.hq_warn_lbl.setStyleSheet(
+            f"font-family:{_MONO_FONT}; font-size:11px; padding:6px;"
+            f"background:#4A3B12; color:#FFC107; border-radius:4px;"
+        )
+        self.hq_warn_lbl.setVisible(False)
+        
+        layout.addWidget(self.hq_warn_lbl)
         layout.addWidget(scroll, stretch=1)
 
         self.export_bar = QProgressBar()
@@ -669,17 +670,30 @@ class VideoTab(QWidget):
         )
         layout.addWidget(self.export_bar)
 
-        seek_container = QWidget()
-        seek_container.setStyleSheet(f"background:{_P0};")
-        seek_layout = QHBoxLayout(seek_container)
-        seek_layout.setContentsMargins(8, 3, 8, 0)
-        seek_layout.setSpacing(6)
+        # ── Unified Player GUI ─────────────────────────────────────────────
+        player_frame = QWidget()
+        player_frame.setStyleSheet(
+            f"QWidget {{ background:{_P1}; border-top:1px solid {_P5}; }}"
+            f"QPushButton {{ background:{_P4}; border:1px solid {_P5}; border-radius:4px; color:{_FG}; font-size:13px; padding:4px 8px; }}"
+            f"QPushButton:hover {{ background:{_P5}; border-color:{_P6}; }}"
+            f"QPushButton:pressed {{ background:{_P3}; }}"
+            f"QPushButton#accent {{ background:{_AE}; border:1px solid {_AE}; color:#000; font-weight:bold; }}"
+            f"QPushButton#accent:hover {{ background:#8AEB8A; }}"
+            f"QSlider::groove:horizontal {{ border:1px solid {_P5}; height:6px; background:{_P2}; border-radius:3px; }}"
+            f"QSlider::sub-page:horizontal {{ background:{_AE}; border-radius:3px; }}"
+            f"QSlider::handle:horizontal {{ background:#FFF; border:1px solid #777; width:12px; margin:-3px 0; border-radius:6px; }}"
+        )
+        vbl = QVBoxLayout(player_frame)
+        vbl.setContentsMargins(12, 12, 12, 12)
+        vbl.setSpacing(8)
+
+        # Top row: Seek slider
+        seek_layout = QHBoxLayout()
+        seek_layout.setContentsMargins(0, 0, 0, 0)
+        seek_layout.setSpacing(10)
 
         self._pos_lbl = QLabel("0:00")
-        self._pos_lbl.setStyleSheet(
-            f"font-family:{_MONO_FONT}; font-size:11px; color:{_FG2};"
-            "min-width:40px;"
-        )
+        self._pos_lbl.setStyleSheet(f"font-family:{_MONO_FONT}; font-size:12px; color:{_FG2}; min-width:35px;")
         self._pos_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.seek_bar = QSlider(Qt.Horizontal)
@@ -687,102 +701,93 @@ class VideoTab(QWidget):
         self.seek_bar.setMaximum(1000)
         self.seek_bar.setValue(0)
         self.seek_bar.setEnabled(False)
-        self.seek_bar.setFixedHeight(18)
+        self.seek_bar.setCursor(Qt.PointingHandCursor)
         self.seek_bar.setToolTip("Seek / scrub  (← / → keys for ±5 s)")
         self.seek_bar.sliderPressed.connect(self._on_seek_press)
         self.seek_bar.sliderMoved.connect(self._on_seek_move)
         self.seek_bar.sliderReleased.connect(self._on_seek_release)
 
         self._dur_lbl = QLabel("0:00")
-        self._dur_lbl.setStyleSheet(
-            f"font-family:{_MONO_FONT}; font-size:11px; color:{_FG3};"
-            "min-width:40px;"
-        )
+        self._dur_lbl.setStyleSheet(f"font-family:{_MONO_FONT}; font-size:12px; color:{_FG3}; min-width:35px;")
         self._dur_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         seek_layout.addWidget(self._pos_lbl)
         seek_layout.addWidget(self.seek_bar, stretch=1)
         seek_layout.addWidget(self._dur_lbl)
-        layout.addWidget(seek_container)
+        vbl.addLayout(seek_layout)
 
-        bar = QWidget()
-        bar.setStyleSheet(f"background:{_P0}; border-top:1px solid {_P5};")
-        bl = QHBoxLayout(bar)
-        bl.setContentsMargins(8, 5, 8, 5)
-        bl.setSpacing(4)
+        # Bottom row: Controls
+        btn_layout = QHBoxLayout()
+        btn_layout.setContentsMargins(0, 0, 0, 0)
+        btn_layout.setSpacing(6)
 
         def _tbtn(label: str, slot, tip: str = "", oid: str = "") -> QPushButton:
             b = QPushButton(label)
             b.setMinimumHeight(28)
-            b.setFixedWidth(56)
-            if oid:
-                b.setObjectName(oid)
+            b.setCursor(Qt.PointingHandCursor)
+            if oid: b.setObjectName(oid)
             b.setToolTip(tip)
             b.clicked.connect(slot)
-            bl.addWidget(b)
+            btn_layout.addWidget(b)
             return b
 
-        self.rewind_btn = _tbtn("⏮",      self._rewind,      "Rewind to start  (Home)")
-        self.play_btn   = _tbtn("▶",      self.toggle_play,  "Play / Pause  (Space)",  "accent")
-        self.stop_btn   = _tbtn("■",      self.stop,         "Stop & rewind  (S)")
-        self.step_f_btn = _tbtn("⏭",      self._end,         "Jump to end  (End)")
+        self.jump_start_btn = _tbtn("⏮", self._rewind, "Jump to start  (Home)")
+        self.step_b_btn = _tbtn("⏴", self._step_backward, "Step backward  (Left Arrow)")
+        self.play_btn   = _tbtn("▶", self.toggle_play, "Play / Pause  (Space)", "accent")
+        self.play_btn.setFixedWidth(64)
+        self.stop_btn   = _tbtn("■", self.stop, "Stop  (S)")
+        self.step_f_btn = _tbtn("⏵", self._step_forward, "Step forward  (Right Arrow)")
+        self.jump_end_btn = _tbtn("⏭", self._end, "Jump to end  (End)")
 
-        bl.addWidget(vsep())
+        btn_layout.addSpacing(12)
 
         self.loop_btn = QPushButton("⟳  Loop")
         self.loop_btn.setCheckable(True)
         self.loop_btn.setMinimumHeight(28)
+        self.loop_btn.setCursor(Qt.PointingHandCursor)
         self.loop_btn.setToolTip("Toggle loop playback  (L)")
         self.loop_btn.setStyleSheet(
-            f"QPushButton {{ background:{_P4}; border:1px solid {_P5}; border-radius:3px;"
-            f"color:{_FG3}; font-size:11px; padding:5px 10px; }}"
-            f"QPushButton:checked {{ background:{_G3}; border-color:{_G2}; color:{_G0}; }}"
-            f"QPushButton:hover {{ border-color:{_P6}; color:{_FG}; }}"
+            f"QPushButton:checked {{ background:{_G3}; border-color:{_G2}; color:{_G0}; font-weight:bold; }}"
         )
         self.loop_btn.toggled.connect(self._on_loop_toggled)
-        bl.addWidget(self.loop_btn)
+        btn_layout.addWidget(self.loop_btn)
 
-        bl.addWidget(vsep())
+        btn_layout.addSpacing(12)
 
-        # ── Audio checkbox ─────────────────────────────────────────────────
-        self.audio_cb = QCheckBox("Include audio")
+        self.audio_cb = QCheckBox("Audio")
         self.audio_cb.setChecked(True)
-        self.audio_cb.setToolTip(
-            "Play audio in preview · mux into exported video (requires ffmpeg in PATH)"
-        )
+        self.audio_cb.setToolTip("Play audio in preview / Export with audio")
         self.audio_cb.stateChanged.connect(lambda _: self._sync_audio_volume())
-        bl.addWidget(self.audio_cb)
+        btn_layout.addWidget(self.audio_cb)
 
-        bl.addStretch()
+        btn_layout.addStretch()
 
         self._frame_badge = QLabel("-- / --")
         self._frame_badge.setStyleSheet(
             f"font-family:{_MONO_FONT}; font-size:11px; color:{_FG2};"
-            f"background:{_P2}; border:1px solid {_P5}; border-radius:2px;"
-            "padding:2px 8px; margin:3px;"
+            f"background:{_P2}; border:1px solid {_P5}; border-radius:3px; padding:3px 8px;"
         )
-        self._frame_badge.setToolTip("Current frame / total frames")
-        bl.addWidget(self._frame_badge)
+        btn_layout.addWidget(self._frame_badge)
 
         self._fps_badge = QLabel("-- fps")
         self._fps_badge.setStyleSheet(
             f"font-family:{_MONO_FONT}; font-size:11px; color:{_FG3};"
-            f"background:{_P2}; border:1px solid {_P5}; border-radius:2px;"
-            "padding:2px 8px; margin:3px;"
+            f"background:{_P2}; border:1px solid {_P5}; border-radius:3px; padding:3px 8px;"
         )
-        self._fps_badge.setToolTip("Source video frame rate")
-        bl.addWidget(self._fps_badge)
+        btn_layout.addWidget(self._fps_badge)
 
-        bl.addWidget(vsep())
+        btn_layout.addSpacing(12)
 
-        export_btn = QPushButton("⥅ Export")
-        export_btn.setObjectName("accent")
-        export_btn.setMinimumHeight(28)
-        export_btn.setToolTip("Export dithered video to MP4")
-        export_btn.clicked.connect(self.export_video)
-        bl.addWidget(export_btn)
+        self.export_btn = QPushButton("⥅  Export")
+        self.export_btn.setObjectName("accent")
+        self.export_btn.setMinimumHeight(28)
+        self.export_btn.setCursor(Qt.PointingHandCursor)
+        self.export_btn.setToolTip("Export dithered video to MP4")
+        self.export_btn.clicked.connect(self._on_export_click)
+        btn_layout.addWidget(self.export_btn)
 
-        layout.addWidget(bar)
+        vbl.addLayout(btn_layout)
+        layout.addWidget(player_frame)
 
         if not _CV2:
             warn = QLabel("⚠ opencv-python not installed — video disabled")
@@ -805,8 +810,8 @@ class VideoTab(QWidget):
         self._set_controls_enabled(False)
 
     def _set_controls_enabled(self, enabled: bool) -> None:
-        for w in (self.rewind_btn, self.play_btn, self.stop_btn,
-                  self.step_f_btn, self.loop_btn, self.seek_bar):
+        for w in (self.jump_start_btn, self.step_b_btn, self.play_btn, self.stop_btn, self.step_f_btn, self.jump_end_btn,
+                  self.loop_btn, self.audio_cb, self.export_btn, self.seek_bar):
             w.setEnabled(enabled)
 
     def open_file(self) -> None:
@@ -853,6 +858,74 @@ class VideoTab(QWidget):
         name     = Path(path).name
         w        = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h        = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        
+        max_dim = max(w, h)
+        if max_dim > 720 and not getattr(self, 'force_original', False):
+            scale = 720.0 / max_dim
+            tw, th = int(w * scale), int(h * scale)
+            tw -= tw % 2
+            th -= th % 2
+            
+            self._proxy_dlg = QProgressDialog("Generating proxy video to prevent lag...", "", 0, self._total_frames, self)
+            self._proxy_dlg.setWindowTitle("Compressing Video for Preview")
+            self._proxy_dlg.setCancelButton(None)
+            self._proxy_dlg.setWindowModality(Qt.WindowModal)
+            self._proxy_dlg.setWindowFlags(Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint)
+            self._proxy_dlg.setMinimumDuration(0)
+            self._proxy_dlg.setValue(0)
+            self._proxy_dlg.show()
+            
+            cap.release()
+            self.video_cap = None
+            
+            import time
+            self._proxy_start_time = time.time()
+            self._proxy_worker = ProxyGeneratorWorker(path, tw, th)
+            
+            def _on_proxy_progress(cur: int) -> None:
+                if not hasattr(self, '_proxy_dlg') or self._proxy_dlg is None: return
+                self._proxy_dlg.setValue(cur)
+                elapsed = time.time() - getattr(self, '_proxy_start_time', time.time())
+                fps = cur / elapsed if elapsed > 0 else 0
+                total = self._total_frames
+                if fps > 0:
+                    eta_sec = (total - cur) / fps
+                    m, s = divmod(int(eta_sec), 60)
+                    h, m = divmod(m, 60)
+                    eta_str = f"{h}h {m}m {s}s" if h > 0 else f"{m}m {s}s"
+                else:
+                    eta_str = "..."
+                pct = int((cur / total) * 100) if total > 0 else 0
+                self._proxy_dlg.setLabelText(f"Generating proxy video to prevent lag... {pct}%  •  {fps:.1f} fps  •  ETA {eta_str}")
+            
+            self._proxy_worker.progress.connect(_on_proxy_progress)
+            self._proxy_worker.error.connect(lambda e: self._on_proxy_done(None, path, duration, name, w, h))
+            self._proxy_worker.finished_proxy.connect(lambda p_path: self._on_proxy_done(p_path, path, duration, name, w, h))
+            self._proxy_worker.start()
+        else:
+            self.hq_warn_lbl.setVisible(False)
+            self._finish_load_video(path, path, duration, name, w, h)
+
+    def _on_proxy_done(self, proxy_path: Optional[str], orig_path: str, duration, name, orig_w, orig_h):
+        if hasattr(self, "_proxy_dlg") and self._proxy_dlg is not None:
+            self._proxy_dlg.close()
+            self._proxy_dlg = None
+        if proxy_path and Path(proxy_path).exists():
+            self.hq_warn_lbl.setText(
+                f"⚠️({orig_w}×{orig_h}) Expect lag when using color_palette/Large Video  . Export will be full resolution."
+            )
+            self.hq_warn_lbl.setVisible(True)
+            self._finish_load_video(proxy_path, orig_path, duration, name, orig_w, orig_h)
+        else:
+            self.hq_warn_lbl.setVisible(False)
+            self._finish_load_video(orig_path, orig_path, duration, name, orig_w, orig_h)
+
+    def _finish_load_video(self, load_path: str, orig_path: str, duration: float, name: str, w: int, h: int) -> None:
+        self.video_cap  = cv2.VideoCapture(load_path)
+        self.video_path = orig_path
+        self.orig_w     = w
+        self.orig_h     = h
+        
         self.info_lbl.setText(
             f"{name}  ·  {w}×{h}  ·  {self._total_frames} fr  ·  {self._fps:.2f} fps  ·  {_fmt_time(duration)}"
         )
@@ -905,6 +978,18 @@ class VideoTab(QWidget):
         if was_playing: self._pause()
         self._seek_to_frame(max(0, self._total_frames - 1))
 
+    def _step_backward(self) -> None:
+        if self.is_playing: self._pause()
+        if not self.video_cap or not self.video_cap.isOpened(): return
+        current_frame = int(self.video_cap.get(cv2.CAP_PROP_POS_FRAMES))
+        self._seek_to_frame(max(0, current_frame - 1))
+
+    def _step_forward(self) -> None:
+        if self.is_playing: self._pause()
+        if not self.video_cap or not self.video_cap.isOpened(): return
+        current_frame = int(self.video_cap.get(cv2.CAP_PROP_POS_FRAMES))
+        self._seek_to_frame(min(self._total_frames - 1, current_frame + 1))
+
     def _on_loop_toggled(self, checked: bool) -> None:
         self.loop = checked
         if self._player is not None:
@@ -939,6 +1024,7 @@ class VideoTab(QWidget):
         ret, frame = self.video_cap.read()
         if not ret:
             return
+            
         self.current_frame = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         self._show(self.current_frame)
         self._update_position_ui(frame_idx, update_bar)
@@ -957,7 +1043,25 @@ class VideoTab(QWidget):
     def _next_frame(self) -> None:
         if not self.video_cap or not self.video_cap.isOpened():
             return
+            
         frame_idx = int(self.video_cap.get(cv2.CAP_PROP_POS_FRAMES))
+
+        # Audio sync: drop frames if lagging, stall if ahead
+        if self.is_playing and self._audio_enabled() and self._player is not None:
+            pos_ms = self._player.position()
+            target_frame = int((pos_ms / 1000.0) * self._fps)
+            diff = target_frame - frame_idx
+            
+            # If audio looped or jumped backwards significantly, sync video backwards
+            if diff < -max(10, int(self._fps / 2)):
+                self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+                frame_idx = target_frame
+            elif diff > 2:
+                self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+                frame_idx = target_frame
+            elif diff < -2:
+                return
+
         ret, frame = self.video_cap.read()
         if not ret:
             if self.loop:
@@ -970,30 +1074,73 @@ class VideoTab(QWidget):
                 self._pause()
                 self._seek_to_frame(0)
             return
+            
         self.current_frame = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         self._show(self.current_frame)
         self._update_position_ui(frame_idx)
 
     def _show(self, img: Image.Image) -> None:
         p = self.get_params()
+        if getattr(self, '_frame_worker', None) and self._frame_worker.isRunning():
+            if self.is_playing:
+                return  # Drop frame instead of cancelling to ensure frames actually render
+            else:
+                self._frame_worker.stop()
+                
+                # Safely orphan the worker in case it doesn't stop immediately
+                old_w = self._frame_worker
+                if not hasattr(self, '_orphaned_workers'):
+                    self._orphaned_workers = []
+                self._orphaned_workers.append(old_w)
+                
+                def _cleanup(*args, w=old_w):
+                    if w in self._orphaned_workers:
+                        self._orphaned_workers.remove(w)
+                    w.deleteLater()
+                    
+                old_w.finished.connect(_cleanup)
+                self._frame_worker = None
+
+        from .workers import FrameDitherWorker
+        self._frame_worker = FrameDitherWorker(img, p, preview=True, is_video=True)
+        self._frame_worker.result_ready.connect(self._on_frame_dithered)
+        self._frame_worker.start()
+
+    def _on_frame_dithered(self, dith: Image.Image) -> None:
+        if dith is None:
+            return
         try:
-            dith = apply_dither(
-                img, p["pixel_size"], p["threshold"], p["color"], p["method"],
-                p["brightness"], p["contrast"], p["blur"], p["sharpen"],
-                p["glow_radius"], p["glow_intensity"],
-                palette_name=p.get("palette_name", "B&W"),
-                custom_palette=p.get("custom_palette"),
-                saturation=p.get("saturation", 1.0),
-                hue_rotate=p.get("hue_rotate", 0),
-                pre_denoise=p.get("pre_denoise", 0),
-                pre_smooth=p.get("pre_smooth", 0),
-                post_denoise=p.get("post_denoise", 0),
-                post_smooth=p.get("post_smooth", 0),
-            )
             self.canvas.set_image(pil_to_pixmap(dith))
             self.canvas.setStyleSheet(f"background:{_P0};")
         except Exception as exc:
             self.status_message.emit(f"frame error: {exc}")
+
+    def cleanup(self) -> None:
+        self.is_playing = False
+        if getattr(self, '_play_timer', None) and self._play_timer.isActive():
+            self._play_timer.stop()
+        if getattr(self, '_frame_worker', None) and self._frame_worker.isRunning():
+            self._frame_worker.stop()
+            self._frame_worker.wait()
+        if getattr(self, 'export_worker', None) and self.export_worker.isRunning():
+            self.export_worker.stop()
+            self.export_worker.wait()
+        if getattr(self, '_proxy_worker', None) and getattr(self._proxy_worker, 'isRunning', lambda: False)():
+            self._proxy_worker.stop()
+            self._proxy_worker.wait()
+        if hasattr(self, '_orphaned_workers'):
+            for w in self._orphaned_workers:
+                if getattr(w, 'isRunning', lambda: False)():
+                    w.stop()
+                    w.wait()
+                w.deleteLater()
+            self._orphaned_workers.clear()
+        if self.video_cap:
+            self.video_cap.release()
+            self.video_cap = None
+        if self._player is not None:
+            self._player.stop()
+        self.current_frame = None
 
     def keyPressEvent(self, event) -> None:
         if not self.video_cap:
@@ -1043,11 +1190,14 @@ class VideoTab(QWidget):
         if self.video_cap:
             self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         p = self.get_params()
+        
+        # Dynamic scaling is now handled internally by apply_dither for videos
+
         self.export_worker = VideoExportWorker(
             self.video_path, path,
             p["pixel_size"], p["threshold"], p["color"], p["method"],
             p["brightness"], p["contrast"], p["blur"], p["sharpen"],
-            p["glow_radius"], p["glow_intensity"],
+            p.get("glow_radius", 0), p.get("glow_intensity", 0),
             palette_name=p.get("palette_name", "B&W"),
             custom_palette=p.get("custom_palette"),
             saturation=p.get("saturation", 1.0),
@@ -1069,22 +1219,75 @@ class VideoTab(QWidget):
         self.export_bar.setVisible(True)
         self.export_bar.setValue(0)
         self.status_message.emit("exporting...")
+        
+        self.export_btn.setText("⨉  Cancel")
+        self.export_btn.setObjectName("")
+        self.export_btn.setStyleSheet(f"background: {_RE}; color: #FFF; font-weight: bold;")
+        
+        import time
+        self._export_start_time = time.time()
         self.export_worker.start()
+
+    def _on_export_click(self) -> None:
+        if self.export_worker and self.export_worker.isRunning():
+            self._cancel_export()
+        else:
+            self.export_video()
+
+    def _cancel_export(self) -> None:
+        if self.export_worker is not None and self.export_worker.isRunning():
+            worker = self.export_worker
+            self.export_worker = None
+            worker.stop()
+            worker.wait()
+            self._orphaned_workers.append(worker)
+            worker.deleteLater()
+            self.export_bar.setVisible(False)
+            self._reset_export_btn()
+            self._set_controls_enabled(True)
+            self.status_message.emit("export cancelled")
+
+    def _reset_export_btn(self) -> None:
+        self.export_btn.setText("⥅  Export")
+        self.export_btn.setObjectName("accent")
+        self.export_btn.setStyleSheet("")
 
     def _on_export_progress(self, cur: int, total: int) -> None:
         self.export_bar.setMaximum(total)
         self.export_bar.setValue(cur)
-        self.status_message.emit(f"exporting {cur}/{total} frames")
+        import time
+        elapsed = time.time() - getattr(self, '_export_start_time', time.time())
+        fps = cur / elapsed if elapsed > 0 else 0
+        if fps > 0:
+            eta_sec = (total - cur) / fps
+            m, s = divmod(int(eta_sec), 60)
+            h, m = divmod(m, 60)
+            eta_str = f"{h}h {m}m {s}s" if h > 0 else f"{m}m {s}s"
+        else:
+            eta_str = "..."
+        pct = int((cur / total) * 100) if total > 0 else 0
+        self.status_message.emit(f"Exporting {pct}%  •  {cur}/{total} frames  •  {fps:.1f} fps  •  ETA {eta_str}")
 
     def _on_export_done(self) -> None:
         if self.export_worker is None:
             return
+        worker = self.export_worker
         self.export_worker = None
+        self._orphaned_workers.append(worker)
+        worker.deleteLater()
+        
         self.export_bar.setVisible(False)
+        self._reset_export_btn()
+        self._set_controls_enabled(True)
         self.status_message.emit("export complete")
         QMessageBox.information(self, "Done", "Video exported.")
         if self.video_cap:
             self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            if hasattr(self, 'frame_slider'):
+                self.frame_slider.blockSignals(True)
+                self.frame_slider.setValue(0)
+                self.frame_slider.blockSignals(False)
+            self._seek_to_frame(0)
 
     def zoom_in(self)  -> None: self.canvas.zoom_in()
     def zoom_out(self) -> None: self.canvas.zoom_out()
@@ -1095,14 +1298,19 @@ class VideoTab(QWidget):
     def zoom_level(self) -> float:
         return self.canvas.zoom_level
 
-    def closeEvent(self, event) -> None:
+    def cleanup(self) -> None:
         self._play_timer.stop()
         if self._player is not None:
             self._player.stop()
         if self.video_cap:
             self.video_cap.release()
             self.video_cap = None
-        if self.export_worker and self.export_worker.isRunning():
+        if self._frame_worker is not None and self._frame_worker.isRunning():
+            self._frame_worker.stop()
+            self._frame_worker.wait(500)
+        if self._proxy_worker is not None and self._proxy_worker.isRunning():
+            self._proxy_worker.requestInterruption()
+            self._proxy_worker.wait(500)
+        if self.export_worker is not None and self.export_worker.isRunning():
             self.export_worker.stop()
             self.export_worker.wait(2000)
-        super().closeEvent(event)

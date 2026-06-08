@@ -1,0 +1,24 @@
+{
+  "method": "Riemersma",
+  "pixel_size": 2,
+  "threshold": 138,
+  "brightness": 1.0,
+  "contrast": 1.6,
+  "saturation": 1.35,
+  "hue_rotate": 150,
+  "blur": 1,
+  "sharpen": 2,
+  "pre_denoise": 0,
+  "pre_smooth": 0,
+  "color": [
+    34,
+    217,
+    167
+  ],
+  "glow_radius": 6,
+  "glow_intensity": 21,
+  "post_denoise": 0,
+  "post_smooth": 0,
+  "palette_name": "Gruvbox",
+  "custom_palette": null
+}

@@ -1,0 +1,24 @@
+{
+  "method": "Halftone",
+  "pixel_size": 4,
+  "threshold": 59,
+  "brightness": 0.98,
+  "contrast": 1.2,
+  "saturation": 1.58,
+  "hue_rotate": 31,
+  "blur": 3,
+  "sharpen": 1,
+  "pre_denoise": 0,
+  "pre_smooth": 0,
+  "color": [
+    27,
+    103,
+    189
+  ],
+  "glow_radius": 2,
+  "glow_intensity": 5,
+  "post_denoise": 0,
+  "post_smooth": 0,
+  "palette_name": "Macintosh",
+  "custom_palette": null
+}

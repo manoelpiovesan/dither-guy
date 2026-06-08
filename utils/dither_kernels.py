@@ -86,7 +86,8 @@ def _apply_hue_rotate(img: Image.Image, degrees: int) -> Image.Image:
     h = (h + degrees) % 360.0
 
     # Saturation + Value
-    s = np.where(cmax == 0, 0.0, delta / cmax)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        s = np.where(cmax == 0, 0.0, delta / cmax)
     v = cmax
 
     # HSV -> RGB
@@ -133,11 +134,22 @@ def _apply_smooth(img: Image.Image, strength: int) -> Image.Image:
 def apply_glow(img: Image.Image, radius: float, intensity: float) -> Image.Image:
     if radius <= 0 or intensity <= 0:
         return img
-    blurred  = img.filter(ImageFilter.GaussianBlur(radius=radius))
-    base     = np.asarray(img,     dtype=np.float32)
-    glow_lyr = np.asarray(blurred, dtype=np.float32) * (intensity / 100.0)
-    out = np.float32(255.0) - (np.float32(255.0) - base) * (np.float32(255.0) - glow_lyr) * np.float32(1.0 / 255.0)
-    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
+    blurred = img.filter(ImageFilter.GaussianBlur(radius=radius))
+    
+    # In-place screen blend to prevent OOM on 4K: A + B - (A * B) / 255
+    base = np.asarray(img, dtype=np.float32)
+    glow = np.asarray(blurred, dtype=np.float32)
+    glow *= (intensity / 100.0)
+    
+    out = np.copy(base)
+    out += glow
+    
+    temp = base * glow
+    temp *= (1.0 / 255.0)
+    
+    out -= temp
+    np.clip(out, 0, 255, out=out)
+    return Image.fromarray(out.astype(np.uint8))
 
 # ---------------------------------------------------------------------------
 # Palette helpers
@@ -184,7 +196,7 @@ def _get_pal_lab(pal: np.ndarray) -> np.ndarray:
     return _PAL_LAB_CACHE[key]
 
 
-USE_GPU_THRESHOLD = 1_000_000
+USE_GPU_THRESHOLD = 100_000
 
 
 def _nearest_palette_indices(pixels, pal: np.ndarray,
@@ -193,14 +205,18 @@ def _nearest_palette_indices(pixels, pal: np.ndarray,
     if on_device:
         return gpu_palette_nearest(pixels, pal_lab)
     pix_lab = _rgb_to_lab_batch(np.asarray(pixels))
-    diff    = pix_lab[:, np.newaxis, :] - pal_lab[np.newaxis, :, :]
-    dists   = np.einsum('nkc,nkc->nk', diff, diff)
+    pix_sq = np.sum(pix_lab**2, axis=-1, keepdims=True)
+    pal_sq = np.sum(pal_lab**2, axis=-1)
+    dot    = pix_lab @ pal_lab.T
+    dists  = pix_sq + pal_sq - 2 * dot
     return np.argmin(dists, axis=1)
 
 
 def _nearest_palette_indices_rgb(pixels: np.ndarray, pal: np.ndarray) -> np.ndarray:
-    diff  = pixels[:, np.newaxis, :] - pal[np.newaxis, :, :]
-    dists = np.einsum('nkc,nkc->nk', diff, diff)
+    pix_sq = np.sum(pixels**2, axis=-1, keepdims=True)
+    pal_sq = np.sum(pal**2, axis=-1)
+    dot    = pixels @ pal.T
+    dists  = pix_sq + pal_sq - 2 * dot
     return np.argmin(dists, axis=1)
 
 
@@ -242,17 +258,20 @@ def _palette_ed_vectorised(
     coeffs: list[tuple],
     on_device: bool = False,
 ) -> np.ndarray:
+    on_device = False  # Disable row-by-row GPU transfers (PCI-E bottleneck)
     h, w, _ = arr.shape
     out = arr.copy()
 
     for y in range(h):
         row  = out[y]                      # (W, 3) float32, already modified by prev rows
         if on_device:
-            idxs = gpu_palette_nearest(row, pal_lab)
+            idxs = gpu_palette_nearest(to_gpu(row), pal_lab)
         else:
             pix_lab = _rgb_to_lab_batch(row)   # (W, 3)
-            diff    = pix_lab[:, np.newaxis, :] - pal_lab[np.newaxis, :, :]  # (W, K, 3)
-            dists   = np.einsum('nkc,nkc->nk', diff, diff)                   # (W, K)
+            pix_sq  = np.sum(pix_lab**2, axis=-1, keepdims=True)
+            pal_sq  = np.sum(pal_lab**2, axis=-1)
+            dot     = pix_lab @ pal_lab.T
+            dists   = pix_sq + pal_sq - 2 * dot
             idxs    = np.argmin(dists, axis=1)                               # (W,)
         snapped = pal[idxs]                # (W, 3)
         err     = row - snapped            # (W, 3)
@@ -291,14 +310,26 @@ def palette_dither(image: Image.Image, palette: list[tuple],
     return Image.fromarray(result, mode="RGB")
 
 
-def palette_dither_fast(image: Image.Image, palette: list[tuple]) -> Image.Image:
+def palette_dither_ordered(image: Image.Image, palette: list[tuple], method: str, use_gpu: bool = False) -> Image.Image:
     arr  = np.array(image.convert("RGB"), dtype=np.float32)
     pal  = np.asarray(palette, dtype=np.float32)
     h, w = arr.shape[:2]
 
-    bayer = tile(_BAYER_4x4, h, w)
+    from .matrices import ORDERED_MATRICES, _BAYER_4x4
+    mat = ORDERED_MATRICES.get(method, _BAYER_4x4)
+    bayer = tile(mat, h, w)
     noise = (bayer - 128.0) * 0.3
     noisy = np.clip(arr + noise[:, :, np.newaxis], 0, 255)
+
+    if use_gpu:
+        try:
+            from .gpu_kernels import gpu_palette_batch, to_gpu
+            # Add batch dimension and process
+            result = gpu_palette_batch(to_gpu(noisy[np.newaxis, ...]), pal)[0]
+            return Image.fromarray(result, mode="RGB")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
 
     flat  = noisy.reshape(-1, 3)
     idxs  = _nearest_palette_indices_rgb(flat, pal)
@@ -311,7 +342,7 @@ def palette_dither_fast(image: Image.Image, palette: list[tuple]) -> Image.Image
 # ---------------------------------------------------------------------------
 
 if _NUMBA:
-    @njit(cache=True, fastmath=True)
+    @njit(cache=True, fastmath=True, nogil=True)
     def _fs_core(a, t):
         h, w = a.shape
         for y in range(h):
@@ -325,7 +356,7 @@ if _NUMBA:
                     if x+1 < w: a[y+1, x+1] += e * 0.0625
         return a
 
-    @njit(cache=True, fastmath=True)
+    @njit(cache=True, fastmath=True, nogil=True)
     def _atkinson_core(a, t):
         h, w = a.shape
         for y in range(h):
@@ -341,7 +372,7 @@ if _NUMBA:
                 if y+2 < h: a[y+2, x] += e
         return a
 
-    @njit(cache=True, fastmath=True)
+    @njit(cache=True, fastmath=True, nogil=True)
     def _jjn_core(a, t):
         h, w = a.shape; d = 48.0
         for y in range(h):
@@ -364,7 +395,7 @@ if _NUMBA:
                     if x+2<w: a[y+2,x+2]+=e*1/d
         return a
 
-    @njit(cache=True, fastmath=True)
+    @njit(cache=True, fastmath=True, nogil=True)
     def _stucki_core(a, t):
         h, w = a.shape; d = 42.0
         for y in range(h):
@@ -387,7 +418,7 @@ if _NUMBA:
                     if x+2<w: a[y+2,x+2]+=e*1/d
         return a
 
-    @njit(cache=True, fastmath=True)
+    @njit(cache=True, fastmath=True, nogil=True)
     def _sierra_core(a, t):
         h, w = a.shape; d = 32.0
         for y in range(h):
@@ -408,7 +439,7 @@ if _NUMBA:
                     if x+1<w: a[y+2,x+1]+=e*2/d
         return a
 
-    @njit(cache=True, fastmath=True)
+    @njit(cache=True, fastmath=True, nogil=True)
     def _sierra_lite_core(a, t):
         h, w = a.shape
         for y in range(h):
@@ -421,7 +452,7 @@ if _NUMBA:
                     a[y+1,x]+=e*0.25
         return a
 
-    @njit(cache=True, fastmath=True)
+    @njit(cache=True, fastmath=True, nogil=True)
     def _nakano_core(a, t):
         h, w = a.shape
         for y in range(h):
@@ -769,6 +800,7 @@ def apply_dither(
     pre_smooth:   int   = 0,
     post_denoise: int   = 0,
     post_smooth:  int   = 0,
+    is_video: bool = False,
 ) -> Image.Image:
     # --- pre-dither adjustments ---
     img = adjust(img, brightness, contrast, blur, sharpen)
@@ -784,7 +816,16 @@ def apply_dither(
     palette  = custom_palette if (custom_palette and len(custom_palette) >= 2) \
                else PALETTES.get(palette_name, PALETTES["B&W"])
     is_bw    = (palette == PALETTES["B&W"])
-    effective_pixel = max(1, pixel_size * (2 if preview else 1))
+    if is_video:
+        video_scale = max(img.width, img.height) / 720.0
+        effective_pixel = max(1, round(pixel_size * video_scale))
+        blur *= video_scale
+        sharpen *= video_scale
+        glow_radius = round(glow_radius * video_scale)
+        pre_smooth *= video_scale
+        post_smooth *= video_scale
+    else:
+        effective_pixel = max(1, pixel_size * (2 if preview else 1))
 
     use_gpu = (
         GPU_BACKEND == "cuda" and
@@ -797,8 +838,11 @@ def apply_dither(
         sh  = max(1, rgb.height // effective_pixel)
         rgb = rgb.resize((sw, sh), Image.NEAREST)
 
-        if preview:
-            result = palette_dither_fast(rgb, palette)
+        from .constants import METHOD_GROUPS
+        is_ordered = method in METHOD_GROUPS.get("Ordered", [])
+        
+        if is_ordered:
+            result = palette_dither_ordered(rgb, palette, method=method, use_gpu=use_gpu)
         else:
             result = palette_dither(rgb, palette, method=method,
                                     threshold=threshold, use_gpu=use_gpu)
@@ -831,25 +875,28 @@ def apply_dither(
         tiled = tile(ORDERED_MATRICES[method], h, w)
         if use_gpu:
             tiled = to_gpu(tiled.astype(np.float32))
-        a = gpu_ordered_dither(a, tiled, t)
-        if use_gpu:
+            a = gpu_ordered_dither(a, tiled, t)
             a = from_gpu(a)
+        else:
+            a = np.where(a.astype(np.float32) + (tiled.astype(np.float32) - 128.0) * (1.0 - t / 255.0) > t, 255, 0).astype(np.uint8)
     elif method == "Crosshatch":
         xs  = np.arange(w, dtype=np.float32)
         ys  = np.arange(h, dtype=np.float32)
         ch  = (np.sin(xs[None, :] * 0.5) + np.sin(ys[:, None] * 0.5)) * 64. + 128.
         if use_gpu:
             ch = to_gpu(ch)
-        a = gpu_ordered_dither(a, ch, t)
-        if use_gpu:
+            a = gpu_ordered_dither(a, ch, t)
             a = from_gpu(a)
+        else:
+            a = np.where(a.astype(np.float32) + (ch.astype(np.float32) - 128.0) * (1.0 - t / 255.0) > t, 255, 0).astype(np.uint8)
     elif method == "Blue-Noise Mask":
         mask = _get_blue_noise_mask(h, w)
         if use_gpu:
             mask = to_gpu(mask)
-        a = gpu_ordered_dither(a, mask, t)
-        if use_gpu:
+            a = gpu_ordered_dither(a, mask, t)
             a = from_gpu(a)
+        else:
+            a = np.where(a.astype(np.float32) + (mask.astype(np.float32) - 128.0) * (1.0 - t / 255.0) > t, 255, 0).astype(np.uint8)
     elif method in _BW_DISPATCH:
         if use_gpu:
             a = from_gpu(a)

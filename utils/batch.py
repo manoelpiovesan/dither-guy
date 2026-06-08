@@ -44,6 +44,13 @@ def batch_process(
                 params.get("glow_intensity", 0),
                 preview=False,
                 palette_name=params.get("palette_name", "B&W"),
+                custom_palette=params.get("custom_palette"),
+                saturation=params.get("saturation", 1.0),
+                hue_rotate=params.get("hue_rotate", 0),
+                pre_denoise=params.get("pre_denoise", 0),
+                pre_smooth=params.get("pre_smooth", 0),
+                post_denoise=params.get("post_denoise", 0),
+                post_smooth=params.get("post_smooth", 0),
             )
             out_path = out_dir / (fp.stem + ".png")
             result.save(out_path)

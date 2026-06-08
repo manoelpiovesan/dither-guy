@@ -1,0 +1,24 @@
+{
+  "method": "Riemersma",
+  "pixel_size": 3,
+  "threshold": 78,
+  "brightness": 0.77,
+  "contrast": 1.09,
+  "saturation": 0.45,
+  "hue_rotate": 50,
+  "blur": 1,
+  "sharpen": 2,
+  "pre_denoise": 0,
+  "pre_smooth": 0,
+  "color": [
+    220,
+    136,
+    145
+  ],
+  "glow_radius": 5,
+  "glow_intensity": 48,
+  "post_denoise": 0,
+  "post_smooth": 0,
+  "palette_name": "ZX Spectrum",
+  "custom_palette": null
+}

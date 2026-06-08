@@ -7,7 +7,7 @@ _HISTORY_LIMIT = 20
 _DEBOUNCE_MS   = 250
 _PREVIEW_SCALE = 0.5
 _VIDEO_WORKERS = max(4, (os.cpu_count() - 1 or 4))
-VERSION        = "4.1.1"
+VERSION        = "5.5.0"
 
 ### Removed Dither Algo
 

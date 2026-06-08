@@ -9,9 +9,6 @@ on:
       - 'v*'
   workflow_dispatch:
 
-# ---------------------------------------------------------------------------
-# Shared PyInstaller exclude flags (unused Qt modules + GPU/CUDA packages)
-# ---------------------------------------------------------------------------
 env:
   _EXCLUDES: >-
     --exclude-module=PySide6.Qt3DAnimation
@@ -26,9 +23,6 @@ env:
     --exclude-module=PySide6.QtDesigner
     --exclude-module=PySide6.QtHelp
     --exclude-module=PySide6.QtLocation
-    --exclude-module=PySide6.QtMultimedia
-    --exclude-module=PySide6.QtMultimediaWidgets
-    --exclude-module=PySide6.QtNetwork
     --exclude-module=PySide6.QtNfc
     --exclude-module=PySide6.QtPdf
     --exclude-module=PySide6.QtPdfWidgets
@@ -51,11 +45,6 @@ env:
     --exclude-module=PySide6.QtWebEngineWidgets
     --exclude-module=PySide6.QtWebSockets
     --exclude-module=PySide6.QtXml
-    --exclude-module=cupy
-    --exclude-module=cupy_cuda11x
-    --exclude-module=cupy_cuda12x
-    --exclude-module=pyopencl
-    --exclude-module=numba.cuda
     --exclude-module=cv2.gapi
     --exclude-module=cv2.cuda
     --exclude-module=tkinter
@@ -66,189 +55,148 @@ env:
 jobs:
   build-windows:
     runs-on: windows-latest
-
+    strategy:
+      matrix:
+        gpu: [universal, cuda]
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Install UPX
         run: choco install upx --no-progress -y
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r requirements.txt
-
+      - name: Install CuPy (CUDA Build)
+        if: matrix.gpu == 'cuda'
+        run: pip install cupy-cuda12x
       - name: Build
         shell: pwsh
         run: |
-          $excludes = $env:_EXCLUDES -split '\s+' | Where-Object { $_ }
+          $excludesStr = $env:_EXCLUDES
+          if ('${{ matrix.gpu }}' -eq 'universal') {
+              $excludesStr += " --exclude-module=cupy --exclude-module=cupy_cuda11x --exclude-module=cupy_cuda12x"
+          }
+          $excludes = $excludesStr -split '\s+' | Where-Object { $_ }
+          $name = "DitherGuy"
+          if ('${{ matrix.gpu }}' -eq 'cuda') {
+              $name = "DitherGuy-CUDA"
+              $excludesStr += " --collect-all=cupy --hidden-import=cupy"
+          }
           $args = @(
             '--clean', '--noconfirm',
-            '--name=DitherGuy',
-            '--onefile',
-            '--windowed',
-            '--icon=app_icon.png',
-            '--add-data=app_icon.png;.',
-            '--hidden-import=PySide6.QtCore',
-            '--hidden-import=PySide6.QtGui',
-            '--hidden-import=PySide6.QtWidgets',
-            '--hidden-import=PIL',
-            '--hidden-import=PIL.Image',
-            '--hidden-import=PIL.ImageFilter',
-            '--hidden-import=PIL.ImageEnhance',
-            '--hidden-import=numpy',
-            '--hidden-import=cv2',
-            '--hidden-import=shiboken6',
-            '--hidden-import=utils',
-            '--hidden-import=utils.constants',
-            '--hidden-import=utils.palettes',
-            '--hidden-import=utils.matrices',
-            '--hidden-import=utils.dither_kernels',
-            '--hidden-import=utils.gpu_kernels',
-            '--hidden-import=utils.presets',
-            '--hidden-import=utils.batch',
-            '--hidden-import=utils.theme',
-            '--hidden-import=utils.workers',
-            '--hidden-import=utils.ui_widgets',
-            '--hidden-import=utils.ui_control_panel',
-            '--hidden-import=utils.ui_tabs',
-            '--hidden-import=utils.ui_dialogs',
-            '--noconsole'
+            "--name=$name",
+            '--onefile', '--windowed', '--noconsole',
+            '--icon=app_icon.png', '--add-data=app_icon.png;.',
+            '--hidden-import=PySide6.QtCore', '--hidden-import=PySide6.QtGui', '--hidden-import=PySide6.QtWidgets',
+            '--hidden-import=PIL', '--hidden-import=PIL.Image', '--hidden-import=PIL.ImageFilter', '--hidden-import=PIL.ImageEnhance',
+            '--hidden-import=numpy', '--hidden-import=cv2', '--hidden-import=shiboken6',
+            '--hidden-import=utils', '--hidden-import=utils.constants', '--hidden-import=utils.palettes',
+            '--hidden-import=utils.matrices', '--hidden-import=utils.dither_kernels', '--hidden-import=utils.gpu_kernels',
+            '--hidden-import=utils.presets', '--hidden-import=utils.batch', '--hidden-import=utils.theme',
+            '--hidden-import=utils.workers', '--hidden-import=utils.ui_widgets', '--hidden-import=utils.ui_control_panel',
+            '--hidden-import=utils.ui_tabs', '--hidden-import=utils.ui_dialogs',
+            '--hidden-import=ui', '--hidden-import=ui.window', '--hidden-import=ui.toolbar', '--hidden-import=ui.handlers',
+            '--collect-all=PySide6.QtMultimedia', '--hidden-import=PySide6.QtMultimedia',
+            '--collect-all=numba', '--hidden-import=numba.cuda', '--hidden-import=numba._devicearray'
           ) + $excludes + @('main.py')
           & pyinstaller @args
-
       - uses: actions/upload-artifact@v4
         with:
-          name: DitherGuy-Windows
-          path: dist/DitherGuy.exe
+          name: DitherGuy-Windows-${{ matrix.gpu }}
+          path: dist/DitherGuy*.exe
           retention-days: 7
 
   build-linux:
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        gpu: [universal, cuda]
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            libxcb-xinerama0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
-            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
-            libxkbcommon-x11-0 libxcb-xkb1 libegl1 libfontconfig1 libdbus-1-3 \
-            upx-ucl
-
+          sudo apt-get install -y --no-install-recommends             libxcb-xinerama0 libxcb-cursor0 libxcb-icccm4 libxcb-image0             libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0             libxkbcommon-x11-0 libxcb-xkb1 libegl1 libfontconfig1 libdbus-1-3             upx-ucl
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r requirements.txt
-
+      - name: Install CuPy (CUDA Build)
+        if: matrix.gpu == 'cuda'
+        run: pip install cupy-cuda12x
       - name: Build
         run: |
+          EXCLUDES="${{ env._EXCLUDES }}"
+          NAME="DitherGuy"
+          if [ "${{ matrix.gpu }}" = "universal" ]; then
+              EXCLUDES="$EXCLUDES --exclude-module=cupy --exclude-module=cupy_cuda11x --exclude-module=cupy_cuda12x"
+          else
+              NAME="DitherGuy-CUDA"
+              EXCLUDES="$EXCLUDES --collect-all=cupy --hidden-import=cupy"
+          fi
           pyinstaller --clean --noconfirm \
-            --name="DitherGuy" \
-            --onefile \
-            --windowed \
-            --strip \
-            --hidden-import=PySide6.QtCore \
-            --hidden-import=PySide6.QtGui \
-            --hidden-import=PySide6.QtWidgets \
-            --hidden-import=PIL \
-            --hidden-import=PIL.Image \
-            --hidden-import=PIL.ImageFilter \
-            --hidden-import=PIL.ImageEnhance \
-            --hidden-import=numpy \
-            --hidden-import=cv2 \
-            --hidden-import=shiboken6 \
-            --hidden-import=utils \
-            --hidden-import=utils.constants \
-            --hidden-import=utils.palettes \
-            --hidden-import=utils.matrices \
-            --hidden-import=utils.dither_kernels \
-            --hidden-import=utils.gpu_kernels \
-            --hidden-import=utils.presets \
-            --hidden-import=utils.batch \
-            --hidden-import=utils.theme \
-            --hidden-import=utils.workers \
-            --hidden-import=utils.ui_widgets \
-            --hidden-import=utils.ui_control_panel \
-            --hidden-import=utils.ui_tabs \
-            --hidden-import=utils.ui_dialogs \
-            ${{ env._EXCLUDES }} \
-            main.py
-
+            --name="$NAME" \
+            --onefile --windowed --strip \
+            --hidden-import=PySide6.QtCore --hidden-import=PySide6.QtGui --hidden-import=PySide6.QtWidgets \
+            --hidden-import=PIL --hidden-import=PIL.Image --hidden-import=PIL.ImageFilter --hidden-import=PIL.ImageEnhance \
+            --hidden-import=numpy --hidden-import=cv2 --hidden-import=shiboken6 \
+            --hidden-import=utils --hidden-import=utils.constants --hidden-import=utils.palettes \
+            --hidden-import=utils.matrices --hidden-import=utils.dither_kernels --hidden-import=utils.gpu_kernels \
+            --hidden-import=utils.presets --hidden-import=utils.batch --hidden-import=utils.theme \
+            --hidden-import=utils.workers --hidden-import=utils.ui_widgets --hidden-import=utils.ui_control_panel \
+            --hidden-import=utils.ui_tabs --hidden-import=utils.ui_dialogs \
+            --hidden-import=ui --hidden-import=ui.window --hidden-import=ui.toolbar --hidden-import=ui.handlers \
+            --collect-all=PySide6.QtMultimedia --hidden-import=PySide6.QtMultimedia \
+            --collect-all=numba --hidden-import=numba.cuda --hidden-import=numba._devicearray \
+            $EXCLUDES main.py
       - name: Make executable
-        run: chmod +x dist/DitherGuy
-
+        run: chmod +x dist/DitherGuy*
       - uses: actions/upload-artifact@v4
         with:
-          name: DitherGuy-Linux
-          path: dist/DitherGuy
+          name: DitherGuy-Linux-${{ matrix.gpu }}
+          path: dist/DitherGuy*
           retention-days: 7
 
   build-macos:
     runs-on: macos-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Install UPX
         run: brew install upx
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r requirements.txt
-
       - name: Build
         run: |
+          EXCLUDES="${{ env._EXCLUDES }} --exclude-module=cupy --exclude-module=cupy_cuda11x --exclude-module=cupy_cuda12x"
           pyinstaller --clean --noconfirm \
             --name="DitherGuy" \
-            --onefile \
-            --windowed \
-            --strip \
-            --hidden-import=PySide6.QtCore \
-            --hidden-import=PySide6.QtGui \
-            --hidden-import=PySide6.QtWidgets \
-            --hidden-import=PIL \
-            --hidden-import=PIL.Image \
-            --hidden-import=PIL.ImageFilter \
-            --hidden-import=PIL.ImageEnhance \
-            --hidden-import=numpy \
-            --hidden-import=cv2 \
-            --hidden-import=shiboken6 \
-            --hidden-import=utils \
-            --hidden-import=utils.constants \
-            --hidden-import=utils.palettes \
-            --hidden-import=utils.matrices \
-            --hidden-import=utils.dither_kernels \
-            --hidden-import=utils.gpu_kernels \
-            --hidden-import=utils.presets \
-            --hidden-import=utils.batch \
-            --hidden-import=utils.theme \
-            --hidden-import=utils.workers \
-            --hidden-import=utils.ui_widgets \
-            --hidden-import=utils.ui_control_panel \
-            --hidden-import=utils.ui_tabs \
-            --hidden-import=utils.ui_dialogs \
-            ${{ env._EXCLUDES }} \
-            main.py
-
+            --onefile --windowed --strip \
+            --hidden-import=PySide6.QtCore --hidden-import=PySide6.QtGui --hidden-import=PySide6.QtWidgets \
+            --hidden-import=PIL --hidden-import=PIL.Image --hidden-import=PIL.ImageFilter --hidden-import=PIL.ImageEnhance \
+            --hidden-import=numpy --hidden-import=cv2 --hidden-import=shiboken6 \
+            --hidden-import=utils --hidden-import=utils.constants --hidden-import=utils.palettes \
+            --hidden-import=utils.matrices --hidden-import=utils.dither_kernels --hidden-import=utils.gpu_kernels \
+            --hidden-import=utils.presets --hidden-import=utils.batch --hidden-import=utils.theme \
+            --hidden-import=utils.workers --hidden-import=utils.ui_widgets --hidden-import=utils.ui_control_panel \
+            --hidden-import=utils.ui_tabs --hidden-import=utils.ui_dialogs \
+            --hidden-import=ui --hidden-import=ui.window --hidden-import=ui.toolbar --hidden-import=ui.handlers \
+            --collect-all=PySide6.QtMultimedia --hidden-import=PySide6.QtMultimedia \
+            --collect-all=numba --hidden-import=numba.cuda --hidden-import=numba._devicearray \
+            $EXCLUDES main.py
       - uses: actions/upload-artifact@v4
         with:
           name: DitherGuy-macOS
@@ -259,23 +207,25 @@ jobs:
     needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-
       - name: Rename platform binaries
         run: |
-          mv artifacts/DitherGuy-Linux/DitherGuy   artifacts/DitherGuy-Linux/DitherGuy-linux
-          mv artifacts/DitherGuy-macOS/DitherGuy   artifacts/DitherGuy-macOS/DitherGuy-macos
-
+          mv artifacts/DitherGuy-Windows-universal/DitherGuy.exe         artifacts/DitherGuy-Windows-universal/DitherGuy-Windows.exe
+          mv artifacts/DitherGuy-Windows-cuda/DitherGuy-CUDA.exe         artifacts/DitherGuy-Windows-cuda/DitherGuy-Windows-CUDA.exe
+          mv artifacts/DitherGuy-Linux-universal/DitherGuy               artifacts/DitherGuy-Linux-universal/DitherGuy-Linux
+          mv artifacts/DitherGuy-Linux-cuda/DitherGuy-CUDA               artifacts/DitherGuy-Linux-cuda/DitherGuy-Linux-CUDA
+          mv artifacts/DitherGuy-macOS/DitherGuy                         artifacts/DitherGuy-macOS/DitherGuy-macOS
       - uses: softprops/action-gh-release@v1
         with:
           files: |
-            artifacts/DitherGuy-Windows/DitherGuy.exe
-            artifacts/DitherGuy-Linux/DitherGuy-linux
-            artifacts/DitherGuy-macOS/DitherGuy-macos
+            artifacts/DitherGuy-Windows-universal/DitherGuy-Windows.exe
+            artifacts/DitherGuy-Windows-cuda/DitherGuy-Windows-CUDA.exe
+            artifacts/DitherGuy-Linux-universal/DitherGuy-Linux
+            artifacts/DitherGuy-Linux-cuda/DitherGuy-Linux-CUDA
+            artifacts/DitherGuy-macOS/DitherGuy-macOS
           draft: false
           prerelease: false
           generate_release_notes: true

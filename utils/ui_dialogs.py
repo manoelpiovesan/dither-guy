@@ -106,6 +106,27 @@ class CropDialog(QDialog):
         return {k: sp.value() for k, sp in self._spins.items()}
 
 
+from PySide6.QtCore import QThread, Signal
+
+class BatchWorker(QThread):
+    progress = Signal(int, int, str)
+    finished_batch = Signal(int, int)
+
+    def __init__(self, in_dir, out_dir, params, cancel_list):
+        super().__init__()
+        self.in_dir = in_dir
+        self.out_dir = out_dir
+        self.params = params
+        self.cancel_list = cancel_list
+
+    def run(self):
+        ok, err = batch_process(
+            self.in_dir, self.out_dir, self.params,
+            progress_cb=lambda d, t, n: self.progress.emit(d, t, n),
+            cancel_flag=self.cancel_list,
+        )
+        self.finished_batch.emit(ok, err)
+
 # ---------------------------------------------------------------------------
 # Batch dialog
 # ---------------------------------------------------------------------------
@@ -119,6 +140,7 @@ class BatchDialog(QDialog):
         self.setWindowTitle("Batch Process")
         self.setMinimumWidth(460)
         self._cancel = [False]
+        self.worker = None
         self._build()
 
     def _build(self) -> None:
@@ -212,27 +234,45 @@ class BatchDialog(QDialog):
         self.run_btn.setEnabled(False)
         self.cancel_btn.setVisible(True)
         self.info_lbl.setText(f"Processing {len(files)} images with {_VIDEO_WORKERS} workers…")
-        QApplication.processEvents()
 
-        def _progress(done: int, total: int, name: str) -> None:
-            self.prog.setValue(done)
-            short = name[:40] if len(name) > 40 else name
-            self.info_lbl.setText(f"[{done}/{total}] {short}")
-            QApplication.processEvents()
+        self.worker = BatchWorker(in_dir, out_dir, params, self._cancel)
+        import time
+        self._batch_start_time = time.time()
+        self.worker.progress.connect(self._progress)
+        self.worker.finished_batch.connect(self._on_done)
+        self.worker.start()
 
-        ok, err = batch_process(
-            in_dir, out_dir, params,
-            progress_cb=_progress,
-            cancel_flag=self._cancel,
-        )
+    def _progress(self, done: int, total: int, name: str) -> None:
+        self.prog.setValue(done)
+        import time
+        elapsed = time.time() - getattr(self, '_batch_start_time', time.time())
+        fps = done / elapsed if elapsed > 0 else 0
+        if fps > 0:
+            eta_sec = (total - done) / fps
+            m, s = divmod(int(eta_sec), 60)
+            h, m = divmod(m, 60)
+            eta_str = f"{h}h {m}m {s}s" if h > 0 else f"{m}m {s}s"
+        else:
+            eta_str = "..."
+        pct = int((done / total) * 100) if total > 0 else 0
+        short = name[:20] + "..." if len(name) > 20 else name
+        self.info_lbl.setText(f"Processing {pct}%  •  [{done}/{total}]  •  {fps:.1f} img/s  •  ETA {eta_str}  •  {short}")
+
+    def _on_done(self, ok: int, err: int) -> None:
         self.prog.setVisible(False)
         self.run_btn.setEnabled(True)
         self.cancel_btn.setVisible(False)
         status = "cancelled" if self._cancel[0] else "complete"
         self.info_lbl.setText(
-            f"Batch {status} · {ok} saved · {err} error(s) → {out_dir}"
+            f"Batch {status} · {ok} saved · {err} error(s) → {self.out_edit.text().strip()}"
         )
 
     def _cancel_batch(self) -> None:
         self._cancel[0] = True
         self.info_lbl.setText("Cancelling…")
+
+    def reject(self) -> None:
+        self._cancel_batch()
+        if self.worker is not None and self.worker.isRunning():
+            self.worker.wait(500)
+        super().reject()

@@ -1,0 +1,24 @@
+{
+  "method": "Bayer 4x4",
+  "pixel_size": 2,
+  "threshold": 50,
+  "brightness": 1.23,
+  "contrast": 1.2,
+  "saturation": 1.72,
+  "hue_rotate": 34,
+  "blur": 0,
+  "sharpen": 3,
+  "pre_denoise": 0,
+  "pre_smooth": 0,
+  "color": [
+    225,
+    173,
+    213
+  ],
+  "glow_radius": 0,
+  "glow_intensity": 40,
+  "post_denoise": 0,
+  "post_smooth": 0,
+  "palette_name": "Macintosh",
+  "custom_palette": null
+}

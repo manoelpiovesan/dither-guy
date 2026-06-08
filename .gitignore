@@ -19,6 +19,11 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.mypy_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+.cache
 
 # PyInstaller
 *.manifest
@@ -38,4 +43,22 @@ env/
 # OS
 .DS_Store
 Thumbs.db
-presets/
+.cursorrules
+.gitignore
+.mcp.json
+.opencode.json
+.windsurfrules
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.claude/settings.json
+.gemini/
+.kiro/
+.qoder
+test_*.py
+.claude/
+.github/code-review-graph.instruction.md
+test_*.mp4
+.gitignore
+.code-review-graph/
+.venv/

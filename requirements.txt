@@ -3,6 +3,7 @@ Pillow>=10.0.0
 numpy>=1.24.0
 opencv-python
 numba
+imageio-ffmpeg
 
 # GPU acceleration (optional — install the one matching your hardware)
 # NVIDIA CUDA:   pip install cupy-cuda12x   (or cupy-cuda11x / cupy-cuda117)

@@ -1,0 +1,18 @@
+{
+  "pixel_size": 3,
+  "threshold": 128,
+  "method": "Bayer 8x8",
+  "palette_name": "Vaporwave",
+  "brightness": 1.05,
+  "contrast": 1.15,
+  "blur": 0.5,
+  "sharpen": 0.0,
+  "glow_radius": 15,
+  "glow_intensity": 30,
+  "saturation": 1.5,
+  "hue_rotate": 0,
+  "pre_denoise": 0,
+  "pre_smooth": 0,
+  "post_denoise": 0,
+  "post_smooth": 0
+}

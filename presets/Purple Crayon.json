@@ -1,0 +1,24 @@
+{
+  "method": "Bayer 8x8",
+  "pixel_size": 6,
+  "threshold": 61,
+  "brightness": 1.0,
+  "contrast": 1.56,
+  "saturation": 0.12,
+  "hue_rotate": 204,
+  "blur": 2,
+  "sharpen": 0,
+  "pre_denoise": 0,
+  "pre_smooth": 0,
+  "color": [
+    60,
+    64,
+    113
+  ],
+  "glow_radius": 0,
+  "glow_intensity": 20,
+  "post_denoise": 0,
+  "post_smooth": 0,
+  "palette_name": "GameBoy Pocket",
+  "custom_palette": null
+}

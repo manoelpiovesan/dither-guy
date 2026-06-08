@@ -1,0 +1,24 @@
+{
+  "method": "Clustered-Dot",
+  "pixel_size": 6,
+  "threshold": 221,
+  "brightness": 1.24,
+  "contrast": 1.36,
+  "saturation": 0.48,
+  "hue_rotate": 51,
+  "blur": 1,
+  "sharpen": 3,
+  "pre_denoise": 0,
+  "pre_smooth": 0,
+  "color": [
+    245,
+    45,
+    239
+  ],
+  "glow_radius": 2,
+  "glow_intensity": 33,
+  "post_denoise": 0,
+  "post_smooth": 0,
+  "palette_name": "NES",
+  "custom_palette": null
+}

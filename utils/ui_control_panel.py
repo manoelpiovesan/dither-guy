@@ -23,6 +23,22 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+class ClickableSwatch(QLabel):
+    clicked = Signal()
+    rightClicked = Signal()
+
+    def mousePressEvent(self, ev):
+        if ev.button() == Qt.LeftButton:
+            self.clicked.emit()
+        elif ev.button() == Qt.RightButton:
+            self.rightClicked.emit()
+        super().mousePressEvent(ev)
+
+
+# ---------------------------------------------------------------------------
 # Method picker
 # ---------------------------------------------------------------------------
 
@@ -123,78 +139,90 @@ class ControlPanel(QWidget):
 
         dg = self._group("Dither")
         _, self._pix_val,  self.pixel_sl  = make_slider(
-            dg.layout(), "pixel size", 1, 20, 4,
+            dg.layout(), "Pixel Size", 1, 20, 4,
             tooltip="Mosaic block size in pixels",
         )
         _, self._thr_val,  self.thresh_sl = make_slider(
-            dg.layout(), "threshold",  0, 255, 128,
+            dg.layout(), "Threshold",  0, 255, 128,
             tooltip="Binarisation threshold (0\u2013255)",
         )
         layout.addWidget(dg)
 
         adj = self._group("Adjustments")
         _, self._br_val, self.bright_sl = make_slider(
-            adj.layout(), "brightness", 0, 200, 100, "{v}%",
+            adj.layout(), "Brightness", 0, 200, 100, "{v}%",
             tooltip="Brightness multiplier (100 = no change)",
         )
         _, self._co_val, self.contr_sl  = make_slider(
-            adj.layout(), "contrast",   0, 200, 100, "{v}%",
+            adj.layout(), "Contrast",   0, 200, 100, "{v}%",
             tooltip="Contrast multiplier (100 = no change)",
         )
         _, self._sa_val, self.sat_sl = make_slider(
-            adj.layout(), "saturation", 0, 200, 100, "{v}%",
+            adj.layout(), "Saturation", 0, 200, 100, "{v}%",
             tooltip="Colour saturation multiplier (100 = no change)",
         )
         _, self._hu_val, self.hue_sl = make_slider(
-            adj.layout(), "hue", 0, 359, 0, "{v}\u00b0",
+            adj.layout(), "Hue", 0, 359, 0, "{v}\u00b0",
             tooltip="Hue rotation in degrees",
         )
         _, self._bl_val, self.blur_sl   = make_slider(
-            adj.layout(), "blur",       0, 10,  0,
+            adj.layout(), "Blur",       0, 10,  0,
             tooltip="Gaussian blur radius before dithering",
         )
         _, self._sh_val, self.sharp_sl  = make_slider(
-            adj.layout(), "sharpen",    0, 5,   0,
+            adj.layout(), "Sharpen",    0, 5,   0,
             tooltip="Unsharp-mask strength",
         )
         layout.addWidget(adj)
 
         pre = self._group("Pre-dither Filters")
         _, self._prd_val, self.pre_denoise_sl = make_slider(
-            pre.layout(), "denoise", 0, 10, 0,
+            pre.layout(), "Denoise", 0, 10, 0,
             tooltip="Median denoise strength before dithering",
         )
         _, self._prs_val, self.pre_smooth_sl = make_slider(
-            pre.layout(), "smooth", 0, 8, 0,
+            pre.layout(), "Smooth", 0, 8, 0,
             tooltip="Smooth filter passes before dithering",
         )
         layout.addWidget(pre)
 
-        reset_btn = QPushButton("\u21ba  Reset Adjustments")
+        reset_layout = QHBoxLayout()
+        reset_layout.setContentsMargins(0, 0, 0, 0)
+        reset_layout.setSpacing(4)
+        
+        reset_btn = QPushButton("↺  Reset Adjustments")
         reset_btn.clicked.connect(self._reset)
         reset_btn.setMinimumHeight(28)
         reset_btn.setToolTip("Reset image adjustments and filters to defaults")
-        layout.addWidget(reset_btn)
+        reset_layout.addWidget(reset_btn)
+        
+        reset_all_btn = QPushButton("↺  Reset All")
+        reset_all_btn.clicked.connect(self.reset_all)
+        reset_all_btn.setMinimumHeight(28)
+        reset_all_btn.setToolTip("Fully reset all settings to defaults")
+        reset_layout.addWidget(reset_all_btn)
+        
+        layout.addLayout(reset_layout)
         layout.addWidget(hsep())
 
         gg = self._group("Glow")
         _, self._gr_val, self.glow_r_sl = make_slider(
-            gg.layout(), "radius",    0, 40,  0,
+            gg.layout(), "Radius",    0, 40,  0,
             tooltip="Bloom glow blur radius",
         )
         _, self._gi_val, self.glow_i_sl = make_slider(
-            gg.layout(), "intensity", 0, 100, 0, "{v}%",
+            gg.layout(), "Intensity", 0, 100, 0, "{v}%",
             tooltip="Bloom glow blend intensity",
         )
         layout.addWidget(gg)
 
         post = self._group("Post-dither Filters")
         _, self._pod_val, self.post_denoise_sl = make_slider(
-            post.layout(), "denoise", 0, 10, 0,
+            post.layout(), "Denoise", 0, 10, 0,
             tooltip="Median denoise strength after dithering",
         )
         _, self._pos_val, self.post_smooth_sl = make_slider(
-            post.layout(), "smooth", 0, 8, 0,
+            post.layout(), "Smooth", 0, 8, 0,
             tooltip="Smooth filter passes after dithering",
         )
         layout.addWidget(post)
@@ -206,7 +234,7 @@ class ControlPanel(QWidget):
         self.swatch.setAlignment(Qt.AlignCenter)
         self._refresh_swatch()
         cg.layout().addWidget(self.swatch)
-        pick_btn = QPushButton("Pick Colour")
+        pick_btn = QPushButton("🖌  Pick Colour")
         pick_btn.setMinimumHeight(28)
         pick_btn.setToolTip("Choose the foreground dither colour")
         pick_btn.clicked.connect(self._pick_color)
@@ -230,8 +258,8 @@ class ControlPanel(QWidget):
         self._refresh_palette_swatches()
 
         custom_row = QHBoxLayout()
-        self.custom_pal_btn   = QPushButton("+ Add")
-        self.clear_custom_btn = QPushButton("\u2715 Clear")
+        self.custom_pal_btn   = QPushButton("＋  Add")
+        self.clear_custom_btn = QPushButton("✕  Clear")
         for b in (self.custom_pal_btn, self.clear_custom_btn):
             b.setMinimumHeight(26)
         self.custom_pal_btn.setToolTip("Add a colour to the custom palette")
@@ -243,41 +271,7 @@ class ControlPanel(QWidget):
         palg.layout().addLayout(custom_row)
         layout.addWidget(palg)
 
-        pg = self._group("Presets")
-        row_p = QHBoxLayout()
-        self.preset_name = QLineEdit()
-        self.preset_name.setPlaceholderText("preset name...")
-        self.preset_name.setMinimumHeight(28)
-        self.preset_name.setToolTip("Name for saving current settings as a preset")
-        save_p = QPushButton("Save")
-        save_p.setMinimumHeight(28)
-        save_p.setToolTip("Save current settings as a named preset")
-        save_p.clicked.connect(self._save_preset)
-        row_p.addWidget(self.preset_name)
-        row_p.addWidget(save_p)
-        pg.layout().addLayout(row_p)
-
-        self.preset_combo = QComboBox()
-        self.preset_combo.setMinimumHeight(28)
-        self.preset_combo.setToolTip("Select a saved preset")
-        self._refresh_preset_combo()
-
-        row_p2 = QHBoxLayout()
-        load_p = QPushButton("Load")
-        load_p.setMinimumHeight(28)
-        load_p.setToolTip("Load selected preset")
-        del_p  = QPushButton("Del")
-        del_p.setMinimumHeight(28)
-        del_p.setObjectName("danger")
-        del_p.setToolTip("Delete selected preset")
-        load_p.clicked.connect(self._load_preset)
-        del_p.clicked.connect(self._delete_preset)
-        row_p2.addWidget(self.preset_combo)
-        row_p2.addWidget(load_p)
-        row_p2.addWidget(del_p)
-        pg.layout().addLayout(row_p2)
-        layout.addWidget(pg)
-
+        # Presets UI moved to top menu bar
         layout.addStretch()
 
         if _NUMBA:
@@ -342,6 +336,27 @@ class ControlPanel(QWidget):
             sl.blockSignals(True)
             sl.setValue(v)
             sl.blockSignals(False)
+        self._refresh_value_labels()
+        self.params_changed.emit()
+
+    def reset_all(self) -> None:
+        """Fully reset all sliders, methods, and palettes to their defaults."""
+        self._reset()
+        self.pixel_sl.blockSignals(True)
+        self.pixel_sl.setValue(2)
+        self.pixel_sl.blockSignals(False)
+        
+        self.thresh_sl.blockSignals(True)
+        self.thresh_sl.setValue(128)
+        self.thresh_sl.blockSignals(False)
+
+        self.method_picker.set_method("Bayer 2x2")
+        self.palette_combo.setCurrentText("B&W")
+        self.current_color = (255, 255, 255)
+        self._refresh_swatch()
+        self._custom_palette.clear()
+        self._refresh_palette_swatches()
+        
         self._refresh_value_labels()
         self.params_changed.emit()
 
@@ -446,12 +461,21 @@ class ControlPanel(QWidget):
         colors = self._custom_palette if name == "Custom" else PALETTES.get(name, [])
         cols   = 8
         for i, (r, g, b) in enumerate(colors):
-            sq = QLabel()
+            sq = ClickableSwatch()
             sq.setFixedSize(16, 16)
-            sq.setToolTip(f"#{r:02X}{g:02X}{b:02X}")
+            tooltip = f"#{r:02X}{g:02X}{b:02X}"
+            if name == "Custom":
+                tooltip += "\nLeft-click to edit\nRight-click to remove"
+                sq.setCursor(Qt.PointingHandCursor)
+            sq.setToolTip(tooltip)
             sq.setStyleSheet(
                 f"background:rgb({r},{g},{b}); border:1px solid {_P6}; border-radius:2px;"
             )
+            
+            if name == "Custom":
+                sq.rightClicked.connect(lambda idx=i: self._remove_custom_color(idx))
+                sq.clicked.connect(lambda idx=i: self._edit_custom_color(idx))
+                
             self.pal_swatch_layout.addWidget(sq, i // cols, i % cols)
 
     def _add_custom_color(self) -> None:
@@ -469,65 +493,73 @@ class ControlPanel(QWidget):
         self._refresh_palette_swatches()
         self.params_changed.emit()
 
+    def _remove_custom_color(self, idx: int) -> None:
+        if 0 <= idx < len(self._custom_palette):
+            self._custom_palette.pop(idx)
+            self._refresh_palette_swatches()
+            self.params_changed.emit()
+
+    def _edit_custom_color(self, idx: int) -> None:
+        if 0 <= idx < len(self._custom_palette):
+            old_c = self._custom_palette[idx]
+            c = QColorDialog.getColor(QColor(*old_c), parent=self, title="Edit Palette Color")
+            if c.isValid():
+                self._custom_palette[idx] = (c.red(), c.green(), c.blue())
+                self._refresh_palette_swatches()
+                self.params_changed.emit()
+
     def _clear_custom_palette(self) -> None:
         self._custom_palette.clear()
         self._refresh_palette_swatches()
         self.params_changed.emit()
 
-    def _refresh_preset_combo(self) -> None:
-        self.preset_combo.blockSignals(True)
-        self.preset_combo.clear()
-        for name in list_presets():
-            self.preset_combo.addItem(name)
-        self.preset_combo.blockSignals(False)
-
-    def _save_preset(self) -> None:
-        name = self.preset_name.text().strip()
-        if not name:
-            QMessageBox.warning(self, "Preset", "Enter a preset name.")
-            return
-        save_preset(name, self.get_params())
-        self._refresh_preset_combo()
-        idx = self.preset_combo.findText(name)
-        if idx >= 0:
-            self.preset_combo.setCurrentIndex(idx)
-        self.preset_name.clear()
-
-    def _load_preset(self) -> None:
-        name = self.preset_combo.currentText()
-        if not name:
-            return
-        p = load_preset(name)
-        if p is None:
-            QMessageBox.warning(self, "Preset", f"Could not load '{name}'.")
-            return
-        self.method_picker.set_method(p.get("method", "Floyd-Steinberg"))
-        self.pixel_sl.setValue(p.get("pixel_size", 4))
-        self.thresh_sl.setValue(p.get("threshold", 128))
-        self.bright_sl.setValue(int(p.get("brightness", 1.0) * 100))
-        self.contr_sl.setValue(int(p.get("contrast", 1.0) * 100))
-        self.sat_sl.setValue(int(p.get("saturation", 1.0) * 100))
-        self.hue_sl.setValue(p.get("hue_rotate", 0))
-        self.blur_sl.setValue(p.get("blur", 0))
-        self.sharp_sl.setValue(p.get("sharpen", 0))
-        self.pre_denoise_sl.setValue(p.get("pre_denoise", 0))
-        self.pre_smooth_sl.setValue(p.get("pre_smooth", 0))
-        self.glow_r_sl.setValue(p.get("glow_radius", 0))
-        self.glow_i_sl.setValue(p.get("glow_intensity", 0))
-        self.post_denoise_sl.setValue(p.get("post_denoise", 0))
-        self.post_smooth_sl.setValue(p.get("post_smooth", 0))
-        self.current_color = tuple(p.get("color", (0, 255, 65)))
-        self._refresh_swatch()
-        pal_name = p.get("palette_name", "B&W")
-        idx = self.palette_combo.findText(pal_name)
-        if idx >= 0:
-            self.palette_combo.setCurrentIndex(idx)
+    def set_params(self, p: dict) -> None:
+        widgets = [
+            self.method_picker, self.palette_combo, self.pixel_sl, self.thresh_sl,
+            self.bright_sl, self.contr_sl, self.sat_sl, self.hue_sl, self.blur_sl,
+            self.sharp_sl, self.pre_denoise_sl, self.pre_smooth_sl, self.glow_r_sl,
+            self.glow_i_sl, self.post_denoise_sl, self.post_smooth_sl
+        ]
+        
+        for w in widgets:
+            w.blockSignals(True)
+            
+        try:
+            self.method_picker.set_method(p.get("method", "Floyd-Steinberg"))
+            self.pixel_sl.setValue(p.get("pixel_size", 4))
+            self.thresh_sl.setValue(p.get("threshold", 128))
+            self.bright_sl.setValue(int(p.get("brightness", 1.0) * 100))
+            self.contr_sl.setValue(int(p.get("contrast", 1.0) * 100))
+            self.sat_sl.setValue(int(p.get("saturation", 1.0) * 100))
+            self.hue_sl.setValue(p.get("hue_rotate", 0))
+            self.blur_sl.setValue(p.get("blur", 0))
+            self.sharp_sl.setValue(p.get("sharpen", 0))
+            self.pre_denoise_sl.setValue(p.get("pre_denoise", 0))
+            self.pre_smooth_sl.setValue(p.get("pre_smooth", 0))
+            self.glow_r_sl.setValue(p.get("glow_radius", 0))
+            self.glow_i_sl.setValue(p.get("glow_intensity", 0))
+            self.post_denoise_sl.setValue(p.get("post_denoise", 0))
+            self.post_smooth_sl.setValue(p.get("post_smooth", 0))
+            self.current_color = tuple(p.get("color", (0, 255, 65)))
+            self._refresh_swatch()
+            
+            if "custom_palette" in p and p["custom_palette"] is not None:
+                self._custom_palette = [tuple(c) for c in p["custom_palette"]]
+                
+            pal_name = p.get("palette_name", "B&W")
+            idx = self.palette_combo.findText(pal_name)
+            if idx >= 0:
+                self.palette_combo.setCurrentIndex(idx)
+            else:
+                self.palette_combo.setCurrentText(pal_name)
+                
+            self._refresh_palette_swatches()
+            self._refresh_value_labels()
+        finally:
+            for w in widgets:
+                w.blockSignals(False)
+                
         self.params_changed.emit()
-
-    def _delete_preset(self) -> None:
-        name = self.preset_combo.currentText()
-        if name and delete_preset(name):
-            self._refresh_preset_combo()
 
     def get_params(self) -> dict:
         pal_name = self.palette_combo.currentText()

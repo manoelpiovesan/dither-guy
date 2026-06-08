@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 import tempfile
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -13,7 +12,7 @@ from PySide6.QtCore import Signal, QThread, QMutex
 
 from .dither_kernels import apply_dither
 from .constants import _VIDEO_WORKERS
-from .gpu_kernels import GPU_BACKEND, to_gpu, from_gpu, gpu_palette_batch
+from .gpu_kernels import GPU_BACKEND, to_gpu, gpu_palette_batch
 from .palettes import PALETTES
 
 try:
@@ -28,7 +27,12 @@ _GPU_EXPORT_BATCH = 8
 def _ffmpeg_mux_audio(video_only_path: str, source_video_path: str, output_path: str) -> bool:
     """Mux audio from source_video_path into video_only_path, write to output_path.
     Returns True on success, False if ffmpeg unavailable or source has no audio."""
-    ffmpeg_cmd = "ffmpeg"
+    try:
+        import imageio_ffmpeg
+        ffmpeg_cmd = imageio_ffmpeg.get_ffmpeg_exe()
+    except ImportError:
+        ffmpeg_cmd = "ffmpeg"
+        
     try:
         subprocess.run(
             [ffmpeg_cmd, "-version"],
@@ -60,7 +64,7 @@ def _ffmpeg_mux_audio(video_only_path: str, source_video_path: str, output_path:
 
 
 class DitherWorker(QThread):
-    finished = Signal(object)
+    result_ready = Signal(object)
     error    = Signal(str)
 
     def __init__(self, img, pixel_size, threshold, replace_color, method,
@@ -108,7 +112,9 @@ class DitherWorker(QThread):
             ok = not self._stop
             self._mutex.unlock()
             if ok:
-                self.finished.emit((result, elapsed, self._prev))
+                self.result_ready.emit((result, elapsed, self._prev))
+            else:
+                self.result_ready.emit(None)
         except MemoryError:
             self.error.emit("Out of memory — try smaller image or larger pixel size.")
         except Exception as exc:
@@ -119,25 +125,27 @@ class DitherWorker(QThread):
 
 
 class FrameDitherWorker(QThread):
-    finished = Signal(object)
-
-    def __init__(self, img: Image.Image, params: dict):
+    result_ready = Signal(object)
+    
+    def __init__(self, img: Image.Image, params: dict, preview: bool = True, is_video: bool = False):
         super().__init__()
-        self._img  = img
-        self._p    = params
+        self._img = img
+        self._p = params
+        self._preview = preview
+        self._is_video = is_video
         self._stop = False
         self._mutex = QMutex()
 
     def run(self) -> None:
         self.setPriority(QThread.Priority.LowPriority)
+        p = self._p
         try:
-            p = self._p
             result = apply_dither(
                 self._img,
                 p["pixel_size"], p["threshold"], p["color"], p["method"],
                 p["brightness"], p["contrast"], p["blur"], p["sharpen"],
                 p.get("glow_radius", 0), p.get("glow_intensity", 0),
-                preview=True,
+                preview=self._preview,
                 palette_name=p.get("palette_name", "B&W"),
                 custom_palette=p.get("custom_palette"),
                 saturation=p.get("saturation", 1.0),
@@ -146,28 +154,32 @@ class FrameDitherWorker(QThread):
                 pre_smooth=p.get("pre_smooth", 0),
                 post_denoise=p.get("post_denoise", 0),
                 post_smooth=p.get("post_smooth", 0),
+                is_video=self._is_video
             )
             self._mutex.lock()
             ok = not self._stop
             self._mutex.unlock()
             if ok:
-                self.finished.emit(result)
+                self.result_ready.emit(result)
+            else:
+                self.result_ready.emit(None)
         except Exception:
-            pass
+            import traceback
+            traceback.print_exc()
 
     def stop(self) -> None:
         self._mutex.lock(); self._stop = True; self._mutex.unlock()
 
 
 def _process_frame_worker(args):
-    frame_bytes, mode, size, ps, t, rc, m, br, co, bl, sh, gr, gi, pal, cpal, sa, hu, prd, prs, pod, pos = args
-    img = Image.frombytes(mode, size, frame_bytes)
+    img, ps, t, rc, m, br, co, bl, sh, gr, gi, pal, cpal, sa, hu, prd, prs, pod, pos = args
     out = apply_dither(img, ps, t, rc, m, br, co, bl, sh, gr, gi,
                        palette_name=pal, custom_palette=cpal,
                        saturation=sa, hue_rotate=hu,
                        pre_denoise=prd, pre_smooth=prs,
-                       post_denoise=pod, post_smooth=pos)
-    return out.tobytes(), out.mode, out.size
+                       post_denoise=pod, post_smooth=pos,
+                       is_video=True)
+    return out
 
 
 def _resolve_palette_rgb(palette_name: str, custom_palette) -> np.ndarray | None:
@@ -222,7 +234,7 @@ class _VideoExportBase(QThread):
         prd, prs       = self._prd, self._prs
         pod, pos       = self._pod, self._pos
         return [
-            (f.tobytes(), f.mode, f.size, ps, t, rc, m, br, co, bl, sh, gr, gi,
+            (f, ps, t, rc, m, br, co, bl, sh, gr, gi,
              pal, cpal, sa, hu, prd, prs, pod, pos)
             for f in frames
         ]
@@ -265,12 +277,7 @@ class VideoExportWorker(_VideoExportBase):
             fps   = cap.get(cv2.CAP_PROP_FPS) or 25.
             total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-            use_gpu_batch = GPU_BACKEND == "cuda"
-            pal_rgb = _resolve_palette_rgb(self._pal, self._cpal) if use_gpu_batch else None
-            if pal_rgb is None:
-                use_gpu_batch = False
-
-            BATCH = _GPU_EXPORT_BATCH if use_gpu_batch else max(1, _VIDEO_WORKERS * 2)
+            BATCH = max(1, _VIDEO_WORKERS * 2)
             count = 0
             last_dithered = None
             frames_buf: list[Image.Image] = []
@@ -287,17 +294,8 @@ class VideoExportWorker(_VideoExportBase):
                     if not frames_buf:
                         break
 
-                    if use_gpu_batch:
-                        arr = np.stack([np.array(f) for f in frames_buf])
-                        arr_gpu  = to_gpu(arr)
-                        arr_out  = gpu_palette_batch(arr_gpu, pal_rgb)
-                        dithered = [Image.fromarray(arr_out[i]) for i in range(len(arr_out))]
-                    else:
-                        dithered = [
-                            Image.frombytes(mode, size, data)
-                            for data, mode, size in executor.map(
-                                _process_frame_worker, self._make_args(frames_buf))
-                        ]
+                    dithered = list(executor.map(
+                        _process_frame_worker, self._make_args(frames_buf)))
 
                     for dith in dithered:
                         if not self._is_running():
@@ -364,28 +362,35 @@ class GifExportWorker(_VideoExportBase):
             total       = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             duration_ms = max(20, int(1000 / fps))
 
+            BATCH = max(1, _VIDEO_WORKERS * 2)
+
             frames: list[Image.Image] = []
             count = 0
+            frames_buf: list[Image.Image] = []
 
-            while self._is_running():
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                pil      = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                dithered = apply_dither(
-                    pil, self._ps, self._t, self._rc, self._m,
-                    self._br, self._co, self._bl, self._sh,
-                    self._gr, self._gi,
-                    palette_name=self._pal, custom_palette=self._cpal,
-                    saturation=self._sa, hue_rotate=self._hu,
-                    pre_denoise=self._prd, pre_smooth=self._prs,
-                    post_denoise=self._pod, post_smooth=self._pos,
-                )
-                frames.append(dithered.convert("P", palette=Image.ADAPTIVE, colors=256))
-                count += 1
-                self.progress.emit(count, total)
-                if count % 10 == 0:
-                    self.frame_ready.emit(dithered)
+            with ThreadPoolExecutor(max_workers=_VIDEO_WORKERS) as executor:
+                while self._is_running():
+                    frames_buf.clear()
+                    for _ in range(BATCH):
+                        ret, frame = cap.read()
+                        if not ret:
+                            break
+                        frames_buf.append(
+                            Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
+                    if not frames_buf:
+                        break
+
+                    dithered = list(executor.map(
+                        _process_frame_worker, self._make_args(frames_buf)))
+
+                    for dith in dithered:
+                        if not self._is_running():
+                            break
+                        frames.append(dith.convert("P", palette=Image.ADAPTIVE, colors=256))
+                        count += 1
+                        self.progress.emit(count, total)
+                        if count % max(1, BATCH) == 0:
+                            self.frame_ready.emit(dith)
 
             if frames and self._is_running():
                 frames[0].save(

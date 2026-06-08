@@ -1,0 +1,18 @@
+{
+  "pixel_size": 4,
+  "threshold": 128,
+  "method": "Bayer 4x4",
+  "palette_name": "Gameboy",
+  "brightness": 1.0,
+  "contrast": 1.1,
+  "blur": 0.0,
+  "sharpen": 0.5,
+  "glow_radius": 0,
+  "glow_intensity": 0,
+  "saturation": 1.0,
+  "hue_rotate": 0,
+  "pre_denoise": 0,
+  "pre_smooth": 0,
+  "post_denoise": 0,
+  "post_smooth": 0
+}

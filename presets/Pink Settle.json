@@ -1,0 +1,24 @@
+{
+  "method": "Void-and-Cluster",
+  "pixel_size": 3,
+  "threshold": 208,
+  "brightness": 1.01,
+  "contrast": 1.02,
+  "saturation": 0.92,
+  "hue_rotate": 8,
+  "blur": 0,
+  "sharpen": 1,
+  "pre_denoise": 0,
+  "pre_smooth": 0,
+  "color": [
+    0,
+    142,
+    54
+  ],
+  "glow_radius": 7,
+  "glow_intensity": 43,
+  "post_denoise": 0,
+  "post_smooth": 0,
+  "palette_name": "Gruvbox",
+  "custom_palette": null
+}
