@@ -51,6 +51,7 @@ def batch_process(
                 pre_smooth=params.get("pre_smooth", 0),
                 post_denoise=params.get("post_denoise", 0),
                 post_smooth=params.get("post_smooth", 0),
+                upscale_factor=params.get("upscale_factor", 1),
             )
             out_path = out_dir / (fp.stem + ".png")
             result.save(out_path)

@@ -146,6 +146,17 @@ class ControlPanel(QWidget):
             dg.layout(), "Threshold",  0, 255, 128,
             tooltip="Binarisation threshold (0\u2013255)",
         )
+        upscale_row = QHBoxLayout()
+        upscale_row.addWidget(QLabel("Upscale"))
+        self.upscale_combo = QComboBox()
+        self.upscale_combo.addItem("1x (Off)", 1)
+        self.upscale_combo.addItem("2x", 2)
+        self.upscale_combo.addItem("4x", 4)
+        self.upscale_combo.addItem("8x", 8)
+        self.upscale_combo.setCurrentIndex(0)
+        self.upscale_combo.setToolTip("Scale image before dithering, then downscale to original size")
+        upscale_row.addWidget(self.upscale_combo)
+        dg.layout().addLayout(upscale_row)
         layout.addWidget(dg)
 
         adj = self._group("Adjustments")
@@ -322,6 +333,7 @@ class ControlPanel(QWidget):
             sl.valueChanged.connect(lambda v, l=lbl, f=fmt: l.setText(f.format(v=v)))
             sl.valueChanged.connect(lambda _: self.params_changed_preview.emit())
             sl.sliderReleased.connect(self.params_changed.emit)
+        self.upscale_combo.currentIndexChanged.connect(lambda _: self.params_changed.emit())
 
     def _reset(self) -> None:
         defaults = [
@@ -345,6 +357,9 @@ class ControlPanel(QWidget):
         self.pixel_sl.blockSignals(True)
         self.pixel_sl.setValue(2)
         self.pixel_sl.blockSignals(False)
+        self.upscale_combo.blockSignals(True)
+        self.upscale_combo.setCurrentIndex(0)
+        self.upscale_combo.blockSignals(False)
         
         self.thresh_sl.blockSignals(True)
         self.thresh_sl.setValue(128)
@@ -515,7 +530,7 @@ class ControlPanel(QWidget):
 
     def set_params(self, p: dict) -> None:
         widgets = [
-            self.method_picker, self.palette_combo, self.pixel_sl, self.thresh_sl,
+            self.method_picker, self.palette_combo, self.upscale_combo, self.pixel_sl, self.thresh_sl,
             self.bright_sl, self.contr_sl, self.sat_sl, self.hue_sl, self.blur_sl,
             self.sharp_sl, self.pre_denoise_sl, self.pre_smooth_sl, self.glow_r_sl,
             self.glow_i_sl, self.post_denoise_sl, self.post_smooth_sl
@@ -527,6 +542,13 @@ class ControlPanel(QWidget):
         try:
             self.method_picker.set_method(p.get("method", "Floyd-Steinberg"))
             self.pixel_sl.setValue(p.get("pixel_size", 4))
+            try:
+                upscale_factor = int(p.get("upscale_factor", 1))
+            except (TypeError, ValueError):
+                upscale_factor = 1
+            upscale_idx = self.upscale_combo.findData(upscale_factor)
+            if upscale_idx >= 0:
+                self.upscale_combo.setCurrentIndex(upscale_idx)
             self.thresh_sl.setValue(p.get("threshold", 128))
             self.bright_sl.setValue(int(p.get("brightness", 1.0) * 100))
             self.contr_sl.setValue(int(p.get("contrast", 1.0) * 100))
@@ -563,9 +585,11 @@ class ControlPanel(QWidget):
 
     def get_params(self) -> dict:
         pal_name = self.palette_combo.currentText()
+        upscale_data = self.upscale_combo.currentData()
         return {
             "method":         self.method_picker.current_method(),
             "pixel_size":     self.pixel_sl.value(),
+            "upscale_factor": upscale_data if upscale_data is not None else 1,
             "threshold":      self.thresh_sl.value(),
             "brightness":     self.bright_sl.value() / 100.0,
             "contrast":       self.contr_sl.value()  / 100.0,
