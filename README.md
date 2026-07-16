@@ -59,6 +59,9 @@ pip install -r requirements.txt
 python3 dither_guy.py
 ````
 
+# Star this repository
+If you find this project useful or interesting, please consider giving it a star on GitHub.
+
 # Contributors
 
 Special thanks to everyone contributing and supporting the project.
