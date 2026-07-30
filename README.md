@@ -80,26 +80,6 @@ If you enjoy the project and want to support future development:
     <img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Ko-Fi">
   </a>
 </p>
-
-
-# Star History
-
-<p align="center">
-  <a href="https://www.star-history.com/?repos=manoelpiovesan/dither-guy&type=date">
-    <picture>
-      <source 
-        media="(prefers-color-scheme: dark)" 
-        srcset="https://api.star-history.com/chart?repos=manoelpiovesan/dither-guy&type=date&theme=dark"
-      />
-      <source 
-        media="(prefers-color-scheme: light)" 
-        srcset="https://api.star-history.com/chart?repos=manoelpiovesan/dither-guy&type=date"
-      />
-      <img 
-        alt="Star History Chart" 
-        src="https://api.star-history.com/chart?repos=manoelpiovesan/dither-guy&type=date"
-      />
-    </picture>
   </a>
 </p>
 
