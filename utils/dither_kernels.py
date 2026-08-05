@@ -801,7 +801,21 @@ def apply_dither(
     post_denoise: int   = 0,
     post_smooth:  int   = 0,
     is_video: bool = False,
+    upscale_factor: int = 1,
 ) -> Image.Image:
+    target_size = img.size
+    upscale_factor = max(1, int(upscale_factor))
+    if upscale_factor > 1:
+        img = img.resize(
+            (img.width * upscale_factor, img.height * upscale_factor),
+            Image.Resampling.BICUBIC,
+        )
+
+    def _restore_size(out: Image.Image) -> Image.Image:
+        if upscale_factor > 1 and out.size != target_size:
+            return out.resize(target_size, Image.Resampling.LANCZOS)
+        return out
+
     # --- pre-dither adjustments ---
     img = adjust(img, brightness, contrast, blur, sharpen)
     if saturation != 1.0:
@@ -857,7 +871,7 @@ def apply_dither(
             result = _apply_denoise(result, post_denoise)
         if post_smooth:
             result = _apply_smooth(result, post_smooth)
-        return result
+        return _restore_size(result)
 
     # -- B&W path --
     img = img.convert('L')
@@ -922,4 +936,4 @@ def apply_dither(
     if post_smooth:
         img = _apply_smooth(img, post_smooth)
 
-    return img
+    return _restore_size(img)

@@ -67,7 +67,7 @@ class DitherWorker(QThread):
     result_ready = Signal(object)
     error    = Signal(str)
 
-    def __init__(self, img, pixel_size, threshold, replace_color, method,
+    def __init__(self, img, pixel_size, upscale_factor, threshold, replace_color, method,
                  brightness, contrast, blur, sharpen,
                  glow_radius=0, glow_intensity=0, preview=False,
                  palette_name="B&W", custom_palette=None,
@@ -75,7 +75,7 @@ class DitherWorker(QThread):
                  pre_denoise=0, pre_smooth=0,
                  post_denoise=0, post_smooth=0):
         super().__init__()
-        self._img  = img; self._ps = pixel_size; self._t = threshold
+        self._img  = img; self._ps = pixel_size; self._uf = upscale_factor; self._t = threshold
         self._rc   = replace_color; self._m = method
         self._br   = brightness; self._co = contrast
         self._bl   = blur; self._sh = sharpen
@@ -106,6 +106,7 @@ class DitherWorker(QThread):
                 pre_smooth=self._prs,
                 post_denoise=self._pod,
                 post_smooth=self._pos,
+                upscale_factor=self._uf,
             )
             elapsed = time.perf_counter() - t0
             self._mutex.lock()
@@ -154,7 +155,8 @@ class FrameDitherWorker(QThread):
                 pre_smooth=p.get("pre_smooth", 0),
                 post_denoise=p.get("post_denoise", 0),
                 post_smooth=p.get("post_smooth", 0),
-                is_video=self._is_video
+                is_video=self._is_video,
+                upscale_factor=p.get("upscale_factor", 1),
             )
             self._mutex.lock()
             ok = not self._stop
@@ -172,13 +174,14 @@ class FrameDitherWorker(QThread):
 
 
 def _process_frame_worker(args):
-    img, ps, t, rc, m, br, co, bl, sh, gr, gi, pal, cpal, sa, hu, prd, prs, pod, pos = args
+    img, ps, uf, t, rc, m, br, co, bl, sh, gr, gi, pal, cpal, sa, hu, prd, prs, pod, pos = args
     out = apply_dither(img, ps, t, rc, m, br, co, bl, sh, gr, gi,
                        palette_name=pal, custom_palette=cpal,
                        saturation=sa, hue_rotate=hu,
                        pre_denoise=prd, pre_smooth=prs,
                        post_denoise=pod, post_smooth=pos,
-                       is_video=True)
+                       is_video=True,
+                       upscale_factor=uf)
     return out
 
 
@@ -199,7 +202,7 @@ def _resolve_palette_rgb(palette_name: str, custom_palette) -> np.ndarray | None
 class _VideoExportBase(QThread):
     error = Signal(str)
 
-    def __init__(self, video_path, save_path, pixel_size, threshold,
+    def __init__(self, video_path, save_path, pixel_size, upscale_factor, threshold,
                  replace_color, method, brightness, contrast, blur, sharpen,
                  glow_radius=0, glow_intensity=0,
                  palette_name="B&W", custom_palette=None,
@@ -209,7 +212,7 @@ class _VideoExportBase(QThread):
                  include_audio=True):
         super().__init__()
         self._vp   = video_path;  self._sp  = save_path
-        self._ps   = pixel_size;  self._t   = threshold
+        self._ps   = pixel_size;  self._uf = upscale_factor; self._t   = threshold
         self._rc   = replace_color; self._m = method
         self._br   = brightness;  self._co  = contrast
         self._bl   = blur;        self._sh  = sharpen
@@ -226,7 +229,7 @@ class _VideoExportBase(QThread):
         self._stop = False; self._mutex = QMutex()
 
     def _make_args(self, frames: list[Image.Image]) -> list:
-        ps, t, rc, m   = self._ps, self._t, self._rc, self._m
+        ps, uf, t, rc, m = self._ps, self._uf, self._t, self._rc, self._m
         br, co, bl, sh = self._br, self._co, self._bl, self._sh
         gr, gi         = self._gr, self._gi
         pal, cpal      = self._pal, self._cpal
@@ -234,7 +237,7 @@ class _VideoExportBase(QThread):
         prd, prs       = self._prd, self._prs
         pod, pos       = self._pod, self._pos
         return [
-            (f, ps, t, rc, m, br, co, bl, sh, gr, gi,
+            (f, ps, uf, t, rc, m, br, co, bl, sh, gr, gi,
              pal, cpal, sa, hu, prd, prs, pod, pos)
             for f in frames
         ]
