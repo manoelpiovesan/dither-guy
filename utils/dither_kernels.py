@@ -609,6 +609,10 @@ def _variable_error_vectorised(a: np.ndarray, t: float) -> np.ndarray:
         a[y+1, 1:w-1] = np.clip(a[y+1, 1:w-1] + e * 5.             / 16., 0, 255)
         a[y+1, 2:w]   = np.clip(a[y+1, 2:w]   + e                  / 16., 0, 255)
         a[y, 1:w-1] = nw
+    # Quantise the borders the interior loop skips (col 0, col w-1, last row)
+    a[-1, :] = np.where(a[-1, :] > t, 255., 0.)
+    a[:, 0]  = np.where(a[:, 0] > t, 255., 0.)
+    a[:, -1] = np.where(a[:, -1] > t, 255., 0.)
     return np.clip(a, 0, 255).astype(np.uint8)
 
 
