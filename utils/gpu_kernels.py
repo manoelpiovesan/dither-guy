@@ -56,7 +56,7 @@ def _try_opencl():
             if best_device:
                 break
         if not best_device:
-            return None, None, None
+            return None, None, None, None
             
         ctx = cl.Context([best_device])
         queue = cl.CommandQueue(ctx)
