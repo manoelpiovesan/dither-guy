@@ -343,7 +343,7 @@ class ControlPanel(QWidget):
         """Fully reset all sliders, methods, and palettes to their defaults."""
         self._reset()
         self.pixel_sl.blockSignals(True)
-        self.pixel_sl.setValue(2)
+        self.pixel_sl.setValue(4)
         self.pixel_sl.blockSignals(False)
         
         self.thresh_sl.blockSignals(True)
