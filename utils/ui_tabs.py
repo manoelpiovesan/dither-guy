@@ -163,7 +163,7 @@ class ImageTab(QWidget):
         p = self.get_params()
         return DitherWorker(
             self.original_img,
-            p["pixel_size"], p["threshold"], p["color"], p["method"],
+            p["pixel_size"], p.get("upscale_factor", 1), p["threshold"], p["color"], p["method"],
             p["brightness"], p["contrast"], p["blur"], p["sharpen"],
             p["glow_radius"], p["glow_intensity"],
             preview=preview,
@@ -1195,7 +1195,7 @@ class VideoTab(QWidget):
 
         self.export_worker = VideoExportWorker(
             self.video_path, path,
-            p["pixel_size"], p["threshold"], p["color"], p["method"],
+            p["pixel_size"], p.get("upscale_factor", 1), p["threshold"], p["color"], p["method"],
             p["brightness"], p["contrast"], p["blur"], p["sharpen"],
             p.get("glow_radius", 0), p.get("glow_intensity", 0),
             palette_name=p.get("palette_name", "B&W"),
